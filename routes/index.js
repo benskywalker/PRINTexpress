@@ -130,25 +130,5 @@ LIMIT 100`;
 
 
 
-router.get('/', (req, res) => {
-  console.log('GET request received');
-
-  const query = `SELECT
-  * FROM person
-  LIMIT 100`;
-
-  // Query
-  db.query(query, (err, rows) => {
-    if (err) {
-      console.log(err);
-      return;
-    }
-    res.json(rows);
-  });
-
-
-}
-);
-
 
 module.exports = router;
