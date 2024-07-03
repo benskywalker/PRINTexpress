@@ -128,7 +128,6 @@ LIMIT 100`;
 }
 );
 
-get all persons
 
 
 router.get('/', (req, res) => {
