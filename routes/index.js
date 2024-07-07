@@ -113,14 +113,14 @@ LEFT JOIN mentions m ON p.personID = m.personID
 LEFT JOIN mentiontype mt ON m.mentiontypeID = mt.mentiontypeID
 LEFT JOIN mention_nodes mn ON m.mentionNodeID = mn.mentionNodeID
 LEFT JOIN relatedletters rl ON p.personID = rl.documentID
-LIMIT 100`;  
+`;  
 
   try {
     const db = await dbPromise;
   const promisePool = db.promise();
 
   promisePool.query(query).then(([rows, fields]) => {
-    res.send(rows);
+    res.json(rows);
 
   });
 
