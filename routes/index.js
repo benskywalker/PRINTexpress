@@ -3,16 +3,14 @@ const express = require('express');
 const router = express.Router();
 
 // Import the database connection
-const db = require('../db');
+const dbPromise = require('../db');
 
 
-
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   console.log('GET request received');
-  db.connect((err) => {
-    if (err) throw err;
-    console.log('Connected to the database');
-  });
+
+
+  // Define the query
   const query = `SELECT
   p.personID,
   p.firstName,
@@ -115,20 +113,48 @@ LEFT JOIN mentions m ON p.personID = m.personID
 LEFT JOIN mentiontype mt ON m.mentiontypeID = mt.mentiontypeID
 LEFT JOIN mention_nodes mn ON m.mentionNodeID = mn.mentionNodeID
 LEFT JOIN relatedletters rl ON p.personID = rl.documentID
-LIMIT 100`;
+LIMIT 100`;  
 
-  // Query the database
-  db.query(query, (err, rows) => {
-    if (err) {
-      console.log(err);
-      return;
-    }
-    res.json(rows);
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+    res.send(rows);
+
   });
-}
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+ }
 );
 
 
+
+async function runQuery(query) {
+  // Get the database connection
+  const db = await dbPromise;
+  const promisePool = db.promise();
+
+
+
+  try {
+    promisePool.query(query).then(([rows, fields]) => {
+      return rows;
+  
+    });
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+  } finally {
+    if (db && db.end) {
+      db.end();
+    }
+  }
+}
 
 
 module.exports = router;
