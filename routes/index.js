@@ -157,4 +157,28 @@ async function runQuery(query) {
 }
 
 
+//get all persons
+router.get('/persons', async (req, res) => {
+  console.log('GET request received');
+  const query = `SELECT * FROM person`;
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+    res.json(rows);
+
+  });
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+});
+
+
+
+
+
 module.exports = router;
