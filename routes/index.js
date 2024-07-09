@@ -177,7 +177,25 @@ router.get('/persons', async (req, res) => {
   }
 });
 
+//search for specific document
+router.get('/documents/:id', async (req, res) => {
+  console.log('GET request received');
+  const query = `SELECT * FROM document WHERE documentID = ${req.params.id}`;
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
 
+  promisePool.query(query).then(([rows, fields]) => {
+    res.json(rows);
+
+  });
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+});
 
 
 
