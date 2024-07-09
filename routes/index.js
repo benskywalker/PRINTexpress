@@ -198,5 +198,26 @@ router.get('/documents/:id', async (req, res) => {
 });
 
 
+//get person by name and wildcard search for uncomplete names
+router.get('/persons/:name', async (req, res) => {
+  console.log('GET request received');
+  const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`;
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+    res.json(rows);
+
+  });
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+});
+
+
 
 module.exports = router;
