@@ -218,6 +218,89 @@ router.get('/persons/:name', async (req, res) => {
   }
 });
 
+//get all connections between persons and documents and join sender and receiver based on documentID
+router.get('/connections', async (req, res) => {
+  console.log('GET request received');
+  
+  //get all senders from person2document
+  //get all receivers from those senders
+  //organize by documentID and join sender and receiver
+  const query = `SELECT
+  p.personID AS senderID,
+  p.firstName AS senderFirstName,
+  p.middleName AS senderMiddleName,
+  p.lastName AS senderLastName,
+  p.suffix AS senderSuffix,
+  p.biography AS senderBiography,
+  r.personID AS receiverID,
+  r.firstName AS receiverFirstName,
+  r.middleName AS receiverMiddleName,
+  r.lastName AS receiverLastName,
+  r.suffix AS receiverSuffix,
+  r.biography AS receiverBiography,
+  pd.docID AS documentID,
+  d.importID,
+  d.collection,
+  d.abstract,
+  d.sortingDate,
+  d.letterDate,
+  d.isJulian,
+  d.researchNotes,
+  d.customCitation,
+  d.docTypeID,
+  d.languageID AS documentLanguageID,
+  d.repositoryID,
+  d.dateAdded,
+  d.status,
+  d.whoCheckedOut,
+  d.volume,
+  d.page,
+  d.folder,
+  d.transcription,
+  d.translation,
+  d.virtual_doc
+FROM
+  person p
+LEFT JOIN person2document pd ON p.personID = pd.personID
+LEFT JOIN document d ON pd.docID = d.documentID
+LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
+
+LEFT JOIN person r ON pd2.personID = r.personID
+WHERE
+  p.personID != r.personID
+
+ORDER BY
+  pd.docID
+`;
+  
+
+
+
+
+
+
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+    res.json(rows);
+
+  }
+
+  );
+
+  }
+
+  catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+}
+);
+  
+
 
 
 module.exports = router;
