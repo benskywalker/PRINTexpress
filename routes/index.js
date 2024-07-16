@@ -421,19 +421,21 @@ FROM
   `
   try {
     const db = await dbPromise;
-  const promisePool = db.promise();
-
-  promisePool.query(query).then(([rows, fields]) => {
-    const senders = rows.map((row) => {
-      return {
-        name: `${row.firstName} ${row.lastName}`,
-        image: 'null'
-      }
+    const promisePool = db.promise();
+  
+    promisePool.query(query).then(([rows, fields]) => {
+      // Format sender names as {sender: {name: 'John Doe', image: null}}
+      const senders = rows.map((row) => {
+        return {
+          sender: {
+            name: `${row.firstName} ${row.lastName}`,
+            image: null // Also, if you want the value to be null, you don't need quotes around null
+          }
+        };
+      });
+  
+      res.json(senders);
     });
-    res.json(senders);
-
-  });
-
   } catch (error) {
     console.error('Failed to run query:', error);
     res.status(500).json({ error: 'Failed to run query' });
@@ -475,9 +477,12 @@ FROM
   promisePool.query(query).then(([rows, fields]) => {
     const receivers = rows.map((row) => {
       return {
-        name: `${row.firstName} ${row.lastName}`,
-        image: 'null'
-      }
+        receiver: {
+          name: `${row.firstName} ${row.lastName}`,
+          image: null
+        }
+      };
+      
     });
     res.json(receivers);
 
