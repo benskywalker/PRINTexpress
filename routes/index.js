@@ -270,8 +270,7 @@ WHERE
   p.personID != r.personID
 
 ORDER BY
-  pd.docID
-`;
+  pd.docID`;
   
 
 
@@ -300,6 +299,39 @@ ORDER BY
 }
 );
   
+
+//get all connections for religion
+router.get('/connections/religion', async (req, res) => {
+  console.log('GET request received');
+  
+  //get all people from person2religion
+  
+  const query =``
+
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool
+  .query(query)
+  .then(([rows, fields]) => {
+    res.json(rows);
+
+  }
+
+  );
+
+  }
+  
+    catch (error) {
+      console.error('Failed to run query:', error);
+      res.status(500).json({ error: 'Failed to run query' });
+      return;
+    } 
+  }
+
+);
+
 
 
 
