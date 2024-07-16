@@ -399,8 +399,102 @@ FROM
 );
 
 
+// get all senders for sender filter in frontend
+router.get('/senders', async (req, res) => {
+  console.log('GET request received');
+  
+  //get all senders from person2document
+  
+  const query =`
+  SELECT
+  p.personID,
+  p.firstName,
+  p.middleName,
+  p.lastName,
+  p.suffix AS suffix,
+  p.biography
+FROM
+  person p
+  INNER JOIN person2document pd ON p.personID = pd.personID
+  INNER JOIN document d ON pd.docID = d.documentID
+
+  `
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+    const senders = rows.map((row) => {
+      return {
+        name: `${row.firstName} ${row.lastName}`,
+        image: 'null'
+      }
+    });
+    res.json(senders);
+
+  });
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+}
+);
 
 
+// get all receivers for receiver filter in frontend
+router.get('/receivers', async (req, res) => {
+  console.log('GET request received');
+  
+  //get all receivers from person2document
+  
+  const query =`
+  SELECT
+  p.personID,
+  p.firstName,
+  p.middleName,
+  p.lastName,
+  p.suffix AS suffix,
+  p.biography
+FROM
+
+  person p
+  INNER JOIN person2document pd ON p.personID = pd.personID
+  INNER JOIN document d ON pd.docID = d.documentID
+  INNER JOIN person2document pd2 ON pd2.docID = d.documentID
+  INNER JOIN person r ON pd2.personID = r.personID
+  WHERE
+    p.personID != r.personID
+
+  `
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+    const receivers = rows.map((row) => {
+      return {
+        name: `${row.firstName} ${row.lastName}`,
+        image: 'null'
+      }
+    });
+    res.json(receivers);
+
+  }
+
+  );
+
+  }
+
+  catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+
+}
+);
 
 
 module.exports = router;
