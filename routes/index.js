@@ -245,8 +245,8 @@ router.get('/connections', async (req, res) => {
     d.importID,
     d.collection,
     d.abstract,
-    d.sortingDate,
-    d.letterDate AS date,
+    d.sortingDate AS date,
+    d.letterDate,
     d.isJulian,
     d.researchNotes,
     d.customCitation,
@@ -317,6 +317,8 @@ router.get('/connections', async (req, res) => {
 }
 );
   
+
+
 
 //get all connections for religion
 router.get('/connections/religion', async (req, res) => {
