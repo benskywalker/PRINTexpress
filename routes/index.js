@@ -318,7 +318,56 @@ router.get('/connections', async (req, res) => {
 );
   
 
+router.get('/dates', async (req, res) => {
+  console.log('GET request received');
+  
+  //get all senders from person2document
+  //get all receivers from those senders
+  //organize by documentID and join sender and receiver
+  const query = `
+  SELECT
+    d.sortingDate AS date
+  FROM
+    person p
+  LEFT JOIN person2document pd ON p.personID = pd.personID
+  LEFT JOIN document d ON pd.docID = d.documentID
+  LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
+  LEFT JOIN person r ON pd2.personID = r.personID
+  WHERE
+    p.personID != r.personID
+  ORDER BY
+    d.sortingDate DESC`;
 
+
+
+
+
+
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promisePool.query(query).then(([rows, fields]) => {
+
+
+
+
+    res.json(rows);
+
+  }
+
+  );
+
+  }
+
+  catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+}
+);
+  
 
 //get all connections for religion
 router.get('/connections/religion', async (req, res) => {
