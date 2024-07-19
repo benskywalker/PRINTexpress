@@ -245,7 +245,7 @@ router.get('/connections', async (req, res) => {
     d.importID,
     d.collection,
     d.abstract,
-    d.sortingDate AS date,
+    DATE_FORMAT(d.sortingDate, '%Y/%m/%d') AS date,
     d.letterDate,
     d.isJulian,
     d.researchNotes,
