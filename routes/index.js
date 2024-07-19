@@ -298,6 +298,9 @@ router.get('/connections', async (req, res) => {
         image: 'null'
       }
 
+      //strip [ and ] from date
+      row.date = row.date.replace(/[\[\]']+/g, '');
+
       //add location as null to each row
       row.location = null;
     });
