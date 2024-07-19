@@ -261,13 +261,15 @@ router.get('/connections', async (req, res) => {
     d.folder,
     d.transcription,
     d.translation,
-    d.virtual_doc
+    d.virtual_doc,
+    pdf.pdfURL
   FROM
     person p
   LEFT JOIN person2document pd ON p.personID = pd.personID
   LEFT JOIN document d ON pd.docID = d.documentID
   LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
   LEFT JOIN person r ON pd2.personID = r.personID
+  LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
   WHERE
     p.personID != r.personID
   ORDER BY
