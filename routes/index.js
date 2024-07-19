@@ -299,7 +299,7 @@ router.get('/connections', async (req, res) => {
       }
 
       //strip [ and ] from date
-      row.date = row.date.replace(/[\[\]']+/g, '');
+      row.date = row.date?.replace(/[\[\]']+/g, '');
 
       //add location as null to each row
       row.location = null;
