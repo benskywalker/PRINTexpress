@@ -327,39 +327,60 @@ router.get('/connections', async (req, res) => {
 //get all documents sent and received by a person
 router.get('/documents/:id', async (req, res) => {
   console.log('GET request received');
-  const query = `
-  SELECT
-  pd.docID AS documentID,
-  d.importID,
-  d.collection,
-  d.abstract,
-  d.sortingDate,
-  d.letterDate,
-  d.isJulian,
-  d.researchNotes,
-  d.customCitation,
-  d.docTypeID,
-  d.languageID AS documentLanguageID,
-  d.repositoryID,
-  d.dateAdded,
-  d.status,
-  d.whoCheckedOut,
-  d.volume,
-  d.page,
-  d.folder,
-  d.transcription,
-  d.translation,
-  d.virtual_doc,
-  pdf.pdfURL
-FROM
+  const personID = req.params.id;
 
-  person p
-  INNER JOIN person2document pd ON p.personID = pd.personID
-  INNER JOIN document d ON pd.docID = d.documentID
+const query = `
+  SELECT
+    p.personID AS senderID,
+    CONCAT(p.firstName, ' ', p.lastName) AS sender,
+    p.firstName AS senderFirstName,
+    p.middleName AS senderMiddleName,
+    p.lastName AS senderLastName,
+    p.suffix AS senderSuffix,
+    p.biography AS senderBiography,
+    r.personID AS receiverID,
+    CONCAT(r.firstName, ' ', r.lastName) AS receiver,  
+    r.firstName AS receiverFirstName,
+    r.middleName AS receiverMiddleName,
+    r.lastName AS receiverLastName,
+    r.suffix AS receiverSuffix,
+    r.biography AS receiverBiography,
+    pd.docID AS document,
+    d.importID,
+    d.collection,
+    d.abstract,
+    DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date,
+    d.letterDate,
+    d.isJulian,
+    d.researchNotes,
+    d.customCitation,
+    d.docTypeID,
+    d.languageID AS documentLanguageID,
+    d.repositoryID,
+    d.dateAdded,
+    d.status,
+    d.whoCheckedOut,
+    d.volume,
+    d.page,
+    d.folder,
+    d.transcription,
+    d.translation,
+    d.virtual_doc,
+    pdf.pdfURL
+  FROM
+    person p
+  LEFT JOIN person2document pd ON p.personID = pd.personID
+  LEFT JOIN document d ON pd.docID = d.documentID
+  LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
+  LEFT JOIN person r ON pd2.personID = r.personID
   LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
-WHERE
-  p.personID = ${req.params.id}
-  `
+  WHERE
+    p.personID != r.personID AND (p.personID = ? OR r.personID = ?)
+  ORDER BY
+    pd.docID
+`;
+
+// Use the query with a database library, passing the personID twice for the placeholders
 
   try {
     const db = await dbPromise;
