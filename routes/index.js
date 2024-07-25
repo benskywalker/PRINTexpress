@@ -329,8 +329,7 @@ router.get('/documents/:id', async (req, res) => {
   console.log('GET request received');
   const personID = req.params.id;
 
-const query = `
-  SELECT
+const query = `  SELECT
     p.personID AS senderID,
     CONCAT(p.firstName, ' ', p.lastName) AS sender,
     p.firstName AS senderFirstName,
@@ -377,18 +376,13 @@ const query = `
   WHERE
     p.personID != r.personID AND (p.personID = ? OR r.personID = ?)
   ORDER BY
-    pd.docID
-`;
-
-// Use the query with a database library, passing the personID twice for the placeholders
-
+    pd.docID`;
+  
   try {
     const db = await dbPromise;
   const promisePool = db.promise();
 
-  promise
-  .query(query)
-  .then(([rows, fields]) => {
+  promisePool.query(query, [personID, personID]).then(([rows, fields]) => {
     res.json(rows);
 
   }
