@@ -219,9 +219,11 @@ router.get('/persons/:name', async (req, res) => {
 });
 
 //get all connections between persons and documents and join sender and receiver based on documentID
-router.get('/connections', async (req, res) => {
+router.get('/connections/:id', async (req, res) => {
   console.log('GET request received');
   
+  const id = req.params.id;
+
   //get all senders from person2document
   //get all receivers from those senders
   //organize by documentID and join sender and receiver
@@ -271,7 +273,8 @@ router.get('/connections', async (req, res) => {
   LEFT JOIN person r ON pd2.personID = r.personID
   LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
   WHERE
-    p.personID != r.personID
+    p.personID != r.personID AND
+    pd.docID = ${id}
   ORDER BY
     pd.docID`;
 
