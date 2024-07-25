@@ -219,10 +219,9 @@ router.get('/persons/:name', async (req, res) => {
 });
 
 //get all connections between persons and documents and join sender and receiver based on documentID
-router.get('/connections/:id', async (req, res) => {
+router.get('/connections', async (req, res) => {
   console.log('GET request received');
   
-  const id = req.params.id;
 
   //get all senders from person2document
   //get all receivers from those senders
@@ -273,8 +272,7 @@ router.get('/connections/:id', async (req, res) => {
   LEFT JOIN person r ON pd2.personID = r.personID
   LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
   WHERE
-    p.personID != r.personID AND
-    pd.docID = ${id}
+    p.personID != r.personID 
   ORDER BY
     pd.docID`;
 
@@ -324,6 +322,68 @@ router.get('/connections/:id', async (req, res) => {
   }
 }
 );
+
+
+//get all documents sent and received by a person
+router.get('/documents/:id', async (req, res) => {
+  console.log('GET request received');
+  const query = `
+  SELECT
+  pd.docID AS documentID,
+  d.importID,
+  d.collection,
+  d.abstract,
+  d.sortingDate,
+  d.letterDate,
+  d.isJulian,
+  d.researchNotes,
+  d.customCitation,
+  d.docTypeID,
+  d.languageID AS documentLanguageID,
+  d.repositoryID,
+  d.dateAdded,
+  d.status,
+  d.whoCheckedOut,
+  d.volume,
+  d.page,
+  d.folder,
+  d.transcription,
+  d.translation,
+  d.virtual_doc,
+  pdf.pdfURL
+FROM
+
+  person p
+  INNER JOIN person2document pd ON p.personID = pd.personID
+  INNER JOIN document d ON pd.docID = d.documentID
+  LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
+WHERE
+  p.personID = ${req.params.id}
+  `
+
+  try {
+    const db = await dbPromise;
+  const promisePool = db.promise();
+
+  promise
+  .query(query)
+  .then(([rows, fields]) => {
+    res.json(rows);
+
+  }
+
+  );
+
+  }
+
+  catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+    return;
+  }
+}
+);
+
   
 
 router.get('/dates', async (req, res) => {
