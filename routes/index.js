@@ -219,9 +219,10 @@ router.get('/persons/:name', async (req, res) => {
 });
 
 //get all connections between persons and documents and join sender and receiver based on documentID
-router.get('/connections', async (req, res) => {
+router.get('/connections/:id', async (req, res) => {
   console.log('GET request received');
-  
+
+  const personID = req.params.id;
 
   //get all senders from person2document
   //get all receivers from those senders
@@ -273,6 +274,7 @@ router.get('/connections', async (req, res) => {
   LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
   WHERE
     p.personID != r.personID 
+  AND (p.personID = ? OR r.personID = ?)
   ORDER BY
     pd.docID`;
 
@@ -281,103 +283,6 @@ router.get('/connections', async (req, res) => {
 
 
 
-  try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
-
-  promisePool.query(query).then(([rows, fields]) => {
-
-    //format sender and receiver names 
-    // ie sender: {name: 'John Doe', image: 'null'}
-    rows.map((row) => {
-      row.sender = {
-        name: `${row.senderFirstName} ${row.senderLastName}`,
-        image: 'null'
-      }
-      row.receiver = {
-        name: `${row.receiverFirstName} ${row.receiverLastName}`,
-        image: 'null'
-      }
-
-      //strip [ and ] from date
-      row.date = row.date?.replace(/[\[\]']+/g, '');
-
-      //add location as null to each row
-      row.location = null;
-    });
-
-
-    res.json(rows);
-
-  }
-
-  );
-
-  }
-
-  catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
-  }
-}
-);
-
-
-//get all documents sent and received by a person
-router.get('/documents/:id', async (req, res) => {
-  console.log('GET request received');
-  const personID = req.params.id;
-
-const query = `  SELECT
-    p.personID AS senderID,
-    CONCAT(p.firstName, ' ', p.lastName) AS sender,
-    p.firstName AS senderFirstName,
-    p.middleName AS senderMiddleName,
-    p.lastName AS senderLastName,
-    p.suffix AS senderSuffix,
-    p.biography AS senderBiography,
-    r.personID AS receiverID,
-    CONCAT(r.firstName, ' ', r.lastName) AS receiver,  
-    r.firstName AS receiverFirstName,
-    r.middleName AS receiverMiddleName,
-    r.lastName AS receiverLastName,
-    r.suffix AS receiverSuffix,
-    r.biography AS receiverBiography,
-    pd.docID AS document,
-    d.importID,
-    d.collection,
-    d.abstract,
-    DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date,
-    d.letterDate,
-    d.isJulian,
-    d.researchNotes,
-    d.customCitation,
-    d.docTypeID,
-    d.languageID AS documentLanguageID,
-    d.repositoryID,
-    d.dateAdded,
-    d.status,
-    d.whoCheckedOut,
-    d.volume,
-    d.page,
-    d.folder,
-    d.transcription,
-    d.translation,
-    d.virtual_doc,
-    pdf.pdfURL
-  FROM
-    person p
-  LEFT JOIN person2document pd ON p.personID = pd.personID
-  LEFT JOIN document d ON pd.docID = d.documentID
-  LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
-  LEFT JOIN person r ON pd2.personID = r.personID
-  LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
-  WHERE
-    p.personID != r.personID AND (p.personID = ? OR r.personID = ?)
-  ORDER BY
-    pd.docID`;
-  
   try {
     const db = await dbPromise;
   const promisePool = db.promise();
@@ -385,19 +290,91 @@ const query = `  SELECT
   promisePool.query(query, [personID, personID]).then(([rows, fields]) => {
     res.json(rows);
 
-  }
+  });
 
-  );
-
-  }
-
-  catch (error) {
+  } catch (error) {
     console.error('Failed to run query:', error);
     res.status(500).json({ error: 'Failed to run query' });
     return;
+
+  
+
   }
+
+  
 }
 );
+//get all documents sent and received by a person
+router.get('/documents/:id', async (req, res) => {
+  console.log('GET request received');
+  const personID = req.params.id;
+
+  const query = `
+    SELECT
+      p.personID AS senderID,
+      CONCAT(p.firstName, ' ', p.lastName) AS sender,
+      p.firstName AS senderFirstName,
+      p.middleName AS senderMiddleName,
+      p.lastName AS senderLastName,
+      p.suffix AS senderSuffix,
+      p.biography AS senderBiography,
+      r.personID AS receiverID,
+      CONCAT(r.firstName, ' ', r.lastName) AS receiver,  
+      r.firstName AS receiverFirstName,
+      r.middleName AS receiverMiddleName,
+      r.lastName AS receiverLastName,
+      r.suffix AS receiverSuffix,
+      r.biography AS receiverBiography,
+      pd.docID AS document,
+      d.importID,
+      d.collection,
+      d.abstract,
+      DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date,
+      d.letterDate,
+      d.isJulian,
+      d.researchNotes,
+      d.customCitation,
+      d.docTypeID,
+      d.languageID AS documentLanguageID,
+      d.repositoryID,
+      d.dateAdded,
+      d.status,
+      d.whoCheckedOut,
+      d.volume,
+      d.page,
+      d.folder,
+      d.transcription,
+      d.translation,
+      d.virtual_doc,
+      pdf.pdfURL
+    FROM
+      person p
+    LEFT JOIN person2document pd ON p.personID = pd.personID
+    LEFT JOIN document d ON pd.docID = d.documentID
+    LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
+    LEFT JOIN person r ON pd2.personID = r.personID
+    LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
+    WHERE
+      p.personID != r.personID AND (p.personID = ? OR r.personID = ?)
+    ORDER BY
+      pd.docID`;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    promisePool.query(query, [personID, personID]).then(([rows, fields]) => {
+      res.json(rows);
+    }).catch(error => {
+      console.error('Failed to run query:', error);
+      res.status(500).json({ error: 'Failed to run query' });
+    });
+
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+  }
+});
 
   
 
