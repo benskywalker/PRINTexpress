@@ -1,14 +1,12 @@
 // routes/index.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
 // Import the database connection
-const dbPromise = require('../db');
+const dbPromise = require("../db");
 
-
-router.get('/', async (req, res) => {
-  console.log('GET request received');
-
+router.get("/", async (req, res) => {
+  console.log("GET request received");
 
   // Define the query
   const query = `SELECT
@@ -113,42 +111,33 @@ LEFT JOIN mentions m ON p.personID = m.personID
 LEFT JOIN mentiontype mt ON m.mentiontypeID = mt.mentiontypeID
 LEFT JOIN mention_nodes mn ON m.mentionNodeID = mn.mentionNodeID
 LEFT JOIN relatedletters rl ON p.personID = rl.documentID
-`;  
+`;
 
   try {
     const db = await dbPromise;
-  const promisePool = db.promise();
+    const promisePool = db.promise();
 
-  promisePool.query(query).then(([rows, fields]) => {
-    res.json(rows);
-
-  });
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
     return;
   }
- }
-);
-
-
+});
 
 async function runQuery(query) {
   // Get the database connection
   const db = await dbPromise;
   const promisePool = db.promise();
 
-
-
   try {
     promisePool.query(query).then(([rows, fields]) => {
       return rows;
-  
     });
-
   } catch (error) {
-    console.error('Failed to run query:', error);
+    console.error("Failed to run query:", error);
   } finally {
     if (db && db.end) {
       db.end();
@@ -609,6 +598,48 @@ FROM
 
 }
 );
+router.get("/sender_receiver", async (req, res) => {
+  console.log("GET request received");
+  const query = "SELECT * FROM person2document";
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
+    promisePool.query(query).then(([rows, fields]) => {
+      const senderMap = new Map();
+
+      const relationshipList = [];
+
+      rows.forEach((row) => {
+        const { docID, personID, roleID } = row;
+
+        if (roleID === 1) {
+          if (!senderMap.has(docID)) {
+            senderMap.set(docID, personID);
+          }
+        }
+      });
+
+      rows.forEach((row) => {
+        const { docID, personID, roleID } = row;
+        const senderID = senderMap.get(docID);
+
+        if (roleID === 2 && senderID && senderID !== personID) {
+          relationshipList.push({
+            senderId: senderID,
+            personId: personID,
+            docId: docID,
+          });
+        }
+      });
+
+      res.json(relationshipList);
+    });
+  } catch (error) {
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
+  }
+});
 
 module.exports = router;
