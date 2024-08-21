@@ -1,12 +1,12 @@
 // routes/index.js
-const express = require("express");
-const router = express.Router();
+const express = require('express')
+const router = express.Router()
 
 // Import the database connection
-const dbPromise = require("../db");
+const dbPromise = require('../db')
 
-router.get("/", async (req, res) => {
-  console.log("GET request received");
+router.get('/', async (req, res) => {
+  console.log('GET request received')
 
   // Define the query
   const query = `SELECT
@@ -111,107 +111,99 @@ LEFT JOIN mentions m ON p.personID = m.personID
 LEFT JOIN mentiontype mt ON m.mentiontypeID = mt.mentiontypeID
 LEFT JOIN mention_nodes mn ON m.mentionNodeID = mn.mentionNodeID
 LEFT JOIN relatedletters rl ON p.personID = rl.documentID
-`;
+`
 
   try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows);
-    });
+      res.json(rows)
+    })
   } catch (error) {
-    console.error("Failed to run query:", error);
-    res.status(500).json({ error: "Failed to run query" });
-    return;
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-});
+})
 
-async function runQuery(query) {
+async function runQuery (query) {
   // Get the database connection
-  const db = await dbPromise;
-  const promisePool = db.promise();
+  const db = await dbPromise
+  const promisePool = db.promise()
 
   try {
     promisePool.query(query).then(([rows, fields]) => {
-      return rows;
-    });
+      return rows
+    })
   } catch (error) {
-    console.error("Failed to run query:", error);
+    console.error('Failed to run query:', error)
   } finally {
     if (db && db.end) {
-      db.end();
+      db.end()
     }
   }
 }
 
-
 //get all persons
 router.get('/persons', async (req, res) => {
-  console.log('GET request received');
-  const query = `SELECT * FROM person`;
+  console.log('GET request received')
+  const query = `SELECT * FROM person`
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query).then(([rows, fields]) => {
-    res.json(rows);
-
-  });
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows)
+    })
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-});
+})
 
 //search for specific document
 router.get('/documents/:id', async (req, res) => {
-  console.log('GET request received');
-  const query = `SELECT * FROM document WHERE documentID = ${req.params.id}`;
+  console.log('GET request received')
+  const query = `SELECT * FROM document WHERE documentID = ${req.params.id}`
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query).then(([rows, fields]) => {
-    res.json(rows);
-
-  });
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows)
+    })
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-});
-
+})
 
 //get person by name and wildcard search for uncomplete names
 router.get('/persons/:name', async (req, res) => {
-  console.log('GET request received');
-  const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`;
+  console.log('GET request received')
+  const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query).then(([rows, fields]) => {
-    res.json(rows);
-
-  });
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows)
+    })
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-});
+})
 
 //get all connections between persons and documents and join sender and receiver based on documentID
 router.get('/connections/:id', async (req, res) => {
-  console.log('GET request received');
+  console.log('GET request received')
 
-  const personID = req.params.id;
+  const personID = req.params.id
 
   //get all senders from person2document
   //get all receivers from those senders
@@ -265,37 +257,24 @@ router.get('/connections/:id', async (req, res) => {
     p.personID != r.personID 
   AND (p.personID = ? OR r.personID = ?)
   ORDER BY
-    pd.docID`;
-
-
-
-
-
+    pd.docID`
 
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query, [personID, personID]).then(([rows, fields]) => {
-    res.json(rows);
-
-  });
-
+    promisePool.query(query, [personID, personID]).then(([rows, fields]) => {
+      res.json(rows)
+    })
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
-
-  
-
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-
-  
-}
-);
+})
 //get all documents sent and received by a person
 router.get('/documents', async (req, res) => {
-  console.log('GET request received');
+  console.log('GET request received')
 
   const query = `
     SELECT
@@ -345,30 +324,30 @@ router.get('/documents', async (req, res) => {
   WHERE
     p.personID != r.personID
   ORDER BY
-    pd.docID`;
+    pd.docID`
 
   try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-    promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows);
-    }).catch(error => {
-      console.error('Failed to run query:', error);
-      res.status(500).json({ error: 'Failed to run query' });
-    });
-
+    promisePool
+      .query(query)
+      .then(([rows, fields]) => {
+        res.json(rows)
+      })
+      .catch(error => {
+        console.error('Failed to run query:', error)
+        res.status(500).json({ error: 'Failed to run query' })
+      })
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
   }
-});
-
-  
+})
 
 router.get('/dates', async (req, res) => {
-  console.log('GET request received');
-  
+  console.log('GET request received')
+
   //get all senders from person2document
   //get all receivers from those senders
   //organize by documentID and join sender and receiver
@@ -384,78 +363,50 @@ router.get('/dates', async (req, res) => {
   WHERE
     p.personID != r.personID
   ORDER BY
-    d.sortingDate DESC`;
-
-
-
-
-
+    d.sortingDate DESC`
 
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query).then(([rows, fields]) => {
-
-
-
-
-    res.json(rows);
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows)
+    })
+  } catch (error) {
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-
-  );
-
-  }
-
-  catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
-  }
-}
-);
-  
+})
 
 //get all connections for religion
 router.get('/connections/religion', async (req, res) => {
-  console.log('GET request received');
-  
+  console.log('GET request received')
+
   //get all people from person2religion
-  
-  const query =``
+
+  const query = ``
 
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool
-  .query(query)
-  .then(([rows, fields]) => {
-    res.json(rows);
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows)
+    })
+  } catch (error) {
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-
-  );
-
-  }
-  
-    catch (error) {
-      console.error('Failed to run query:', error);
-      res.status(500).json({ error: 'Failed to run query' });
-      return;
-    } 
-  }
-
-);
-
+})
 
 //get all connections for organization
 router.get('/connections/organization', async (req, res) => {
-  console.log('GET request received');
-  
+  console.log('GET request received')
+
   //get all people from person2organization and specify what organization they are in
-  const query =`
+  const query = `
   SELECT
   p.personID,
   p.firstName,
@@ -469,42 +420,27 @@ FROM
   INNER JOIN organization org ON po.organizationID = org.organizationID
   `
 
-
-  
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool
-  .query(query)
-  .then(([rows, fields]) => {
-    
-
-    res.json(rows);
-
+    promisePool.query(query).then(([rows, fields]) => {
+      res.json(rows)
+    })
+  } catch (error) {
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-
-  );
-
-  }
-  
-    catch (error) {
-      console.error('Failed to run query:', error);
-      res.status(500).json({ error: 'Failed to run query' });
-      return;
-    } 
-  }
-
-);
-
+})
 
 // get all senders for sender filter in frontend
 router.get('/senders', async (req, res) => {
-  console.log('GET request received');
-  
+  console.log('GET request received')
+
   //get all senders from person2document
-  
-  const query =`
+
+  const query = `
   SELECT
   p.personID,
   p.firstName,
@@ -519,40 +455,34 @@ FROM
 
   `
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query).then(([rows, fields]) => {
-    //format sender names as {sender: {name: 'John Doe', image: 'null'}}
-    const senders = rows.map((row) => {
-      return {
-        name: `${row.firstName} ${row.lastName}`,
-        image: 'null'
-      }
-    }
-    );
+    promisePool.query(query).then(([rows, fields]) => {
+      //format sender names as {sender: {name: 'John Doe', image: 'null'}}
+      const senders = rows.map(row => {
+        return {
+          name: `${row.firstName} ${row.lastName}`,
+          image: 'null'
+        }
+      })
 
-    
-    res.json(senders);
-
-  });
-
+      res.json(senders)
+    })
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
-}
-);
-
+})
 
 // get all receivers for receiver filter in frontend
 router.get('/receivers', async (req, res) => {
-  console.log('GET request received');
-  
+  console.log('GET request received')
+
   //get all receivers from person2document
-  
-  const query =`
+
+  const query = `
   SELECT
   p.personID,
   p.firstName,
@@ -572,74 +502,143 @@ FROM
 
   `
   try {
-    const db = await dbPromise;
-  const promisePool = db.promise();
+    const db = await dbPromise
+    const promisePool = db.promise()
 
-  promisePool.query(query).then(([rows, fields]) => {
-    const receivers = rows.map((row) => {
-      return {
-        name: `${row.firstName} ${row.lastName}`,
-        image: 'null'
-      }
-    });
-    res.json(receivers);
-
+    promisePool.query(query).then(([rows, fields]) => {
+      const receivers = rows.map(row => {
+        return {
+          name: `${row.firstName} ${row.lastName}`,
+          image: 'null'
+        }
+      })
+      res.json(receivers)
+    })
+  } catch (error) {
+    console.error('Failed to run query:', error)
+    res.status(500).json({ error: 'Failed to run query' })
+    return
   }
+})
 
-  );
+router.get('/sender_receiver', async (req, res) => {
+  console.log('GET request received');
+  
+  const query = `
+  SELECT
+    sender.personID AS senderID,
+    CONCAT(sender.firstName, ' ', sender.lastName) AS senderName,
+    sender.firstName AS senderFirstName,
+    sender.middleName AS senderMiddleName,
+    sender.lastName AS senderLastName,
+    sender.suffix AS senderSuffix,
+    sender.biography AS senderBiography,
+    receiver.personID AS receiverID,
+    CONCAT(receiver.firstName, ' ', receiver.lastName) AS receiverName,
+    receiver.firstName AS receiverFirstName,
+    receiver.middleName AS receiverMiddleName,
+    receiver.lastName AS receiverLastName,
+    receiver.suffix AS receiverSuffix,
+    receiver.biography AS receiverBiography,
+    pd.docID AS documentID,
+    d.importID,
+    d.collection,
+    d.abstract,
+    DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date,
+    d.letterDate,
+    d.isJulian,
+    d.researchNotes,
+    d.customCitation,
+    d.docTypeID,
+    d.languageID AS documentLanguageID,
+    d.repositoryID,
+    d.dateAdded,
+    d.status,
+    d.whoCheckedOut,
+    d.volume,
+    d.page,
+    d.folder,
+    d.transcription,
+    d.translation,
+    d.virtual_doc,
+    pdf.pdfURL
+  FROM
+    person sender
+  LEFT JOIN person2document pd ON sender.personID = pd.personID
+  LEFT JOIN document d ON pd.docID = d.documentID
+  LEFT JOIN person2document pd2 ON pd2.docID = d.documentID
+  LEFT JOIN person receiver ON pd2.personID = receiver.personID
+  LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
+  WHERE
+    sender.personID != receiver.personID
+  ORDER BY
+    pd.docID    `;
 
-  }
-
-  catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-    return;
-  }
-
-}
-);
-router.get("/sender_receiver", async (req, res) => {
-  console.log("GET request received");
-  const query = "SELECT * FROM person2document";
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      const senderMap = new Map();
-
-      const relationshipList = [];
-
-      rows.forEach((row) => {
-        const { docID, personID, roleID } = row;
-
-        if (roleID === 1) {
-          if (!senderMap.has(docID)) {
-            senderMap.set(docID, personID);
+      const relation = rows.map(row => {
+        return {
+          sender: {
+            id: row.senderID,
+            name: row.senderName,
+            firstName: row.senderFirstName,
+            middleName: row.senderMiddleName,
+            lastName: row.senderLastName,
+            suffix: row.senderSuffix,
+            biography: row.senderBiography,
+            image: 'null'
+          },
+          receiver: {
+            id: row.receiverID,
+            name: row.receiverName,
+            firstName: row.receiverFirstName,
+            middleName: row.receiverMiddleName,
+            lastName: row.receiverLastName,
+            suffix: row.receiverSuffix,
+            biography: row.receiverBiography,
+            image: 'null'
+          },
+          document: {
+            id: row.documentID,
+            importID: row.importID,
+            collection: row.collection,
+            abstract: row.abstract,
+            date: row.date,
+            letterDate: row.letterDate,
+            isJulian: row.isJulian,
+            researchNotes: row.researchNotes,
+            customCitation: row.customCitation,
+            docTypeID: row.docTypeID,
+            documentLanguageID: row.documentLanguageID,
+            repositoryID: row.repositoryID,
+            dateAdded: row.dateAdded,
+            status: row.status,
+            whoCheckedOut: row.whoCheckedOut,
+            volume: row.volume,
+            page: row.page,
+            folder: row.folder,
+            transcription: row.transcription,
+            translation: row.translation,
+            virtual_doc: row.virtual_doc,
+            pdfURL: row.pdfURL
           }
-        }
+        };
       });
-
-      rows.forEach((row) => {
-        const { docID, personID, roleID } = row;
-        const senderID = senderMap.get(docID);
-
-        if (roleID === 2 && senderID && senderID !== personID) {
-          relationshipList.push({
-            senderId: senderID,
-            personId: personID,
-            docId: docID,
-          });
-        }
-      });
-
-      res.json(relationshipList);
+      res.json(relation);
+    }).catch(error => {
+      console.error('Failed to run query:', error);
+      res.status(500).json({ error: 'Failed to run query' });
     });
   } catch (error) {
-    console.error("Failed to run query:", error);
-    res.status(500).json({ error: "Failed to run query" });
-    return;
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
   }
 });
 
-module.exports = router;
+
+
+
+module.exports = router
