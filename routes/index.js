@@ -642,17 +642,17 @@ router.get('/sender_receiver', async (req, res) => {
 
 // This is the relations route
 // It will gather all the nodes and edges for the graph
-// The nodes will come from the person table
+// The nodes will come from the person and organization tables
 // The edges will come from the person2document, person2organization, and person2religion tables
 // The edges will be between the person and the document, organization, or religion
-// Each node will store all the person's information
+// Each node will store all the person's or organization's information
 // The query will use joins to get all the information needed
 router.get('/relations', async (req, res) => {
   console.log('GET request received');
 
   const query = `
     SELECT
-      p.personID,
+      p.personID AS id,
       p.firstName,
       p.middleName,
       p.lastName,
@@ -673,11 +673,15 @@ router.get('/relations', async (req, res) => {
       'person' AS nodeType,
       NULL AS documentID,
       NULL AS organizationID,
-      NULL AS religionID
+      NULL AS religionID,
+      NULL AS organizationName,
+      NULL AS formationDate,
+      NULL AS dissolutionDate,
+      NULL AS organizationLOD
     FROM person p
     UNION
     SELECT
-      p2d.personID,
+      p2d.personID AS id,
       p.firstName,
       p.middleName,
       p.lastName,
@@ -698,12 +702,16 @@ router.get('/relations', async (req, res) => {
       'document' AS nodeType,
       p2d.docID AS documentID,
       NULL AS organizationID,
-      NULL AS religionID
+      NULL AS religionID,
+      NULL AS organizationName,
+      NULL AS formationDate,
+      NULL AS dissolutionDate,
+      NULL AS organizationLOD
     FROM person2document p2d
     JOIN person p ON p2d.personID = p.personID
     UNION
     SELECT
-      p2o.personID,
+      p2o.personID AS id,
       p.firstName,
       p.middleName,
       p.lastName,
@@ -724,12 +732,16 @@ router.get('/relations', async (req, res) => {
       'organization' AS nodeType,
       NULL AS documentID,
       p2o.organizationID AS organizationID,
-      NULL AS religionID
+      NULL AS religionID,
+      NULL AS organizationName,
+      NULL AS formationDate,
+      NULL AS dissolutionDate,
+      NULL AS organizationLOD
     FROM person2organization p2o
     JOIN person p ON p2o.personID = p.personID
     UNION
     SELECT
-      p2r.personID,
+      p2r.personID AS id,
       p.firstName,
       p.middleName,
       p.lastName,
@@ -750,9 +762,42 @@ router.get('/relations', async (req, res) => {
       'religion' AS nodeType,
       NULL AS documentID,
       NULL AS organizationID,
-      p2r.religionID AS religionID
+      p2r.religionID AS religionID,
+      NULL AS organizationName,
+      NULL AS formationDate,
+      NULL AS dissolutionDate,
+      NULL AS organizationLOD
     FROM person2religion p2r
     JOIN person p ON p2r.personID = p.personID
+    UNION
+    SELECT
+      o.organizationID AS id,
+      NULL AS firstName,
+      NULL AS middleName,
+      NULL AS lastName,
+      NULL AS suffix,
+      NULL AS biography,
+      NULL AS gender,
+      NULL AS birthDate,
+      NULL AS deathDate,
+      NULL AS last_prefix,
+      NULL AS LODwikiData,
+      NULL AS LODVIAF,
+      NULL AS LODLOC,
+      NULL AS first_prefix_id,
+      NULL AS last_prefix_id,
+      NULL AS suffix_id,
+      NULL AS language_id,
+      NULL AS personStdName,
+      'organization' AS nodeType,
+      NULL AS documentID,
+      NULL AS organizationID,
+      NULL AS religionID,
+      o.organizationName,
+      o.formationDate,
+      o.dissolutionDate,
+      o.organizationLOD
+    FROM organization o
   `;
 
   try {
@@ -765,7 +810,7 @@ router.get('/relations', async (req, res) => {
 
       rows.forEach(row => {
         const node = {
-          id: row.personID,
+          id: row.id,
           firstName: row.firstName,
           middleName: row.middleName,
           lastName: row.lastName,
@@ -783,7 +828,11 @@ router.get('/relations', async (req, res) => {
           suffix_id: row.suffix_id,
           language_id: row.language_id,
           personStdName: row.personStdName,
-          nodeType: row.nodeType
+          nodeType: row.nodeType,
+          organizationName: row.organizationName,
+          formationDate: row.formationDate,
+          dissolutionDate: row.dissolutionDate,
+          organizationLOD: row.organizationLOD
         };
 
         if (!nodes.some(n => n.id === node.id && n.nodeType === node.nodeType)) {
@@ -792,19 +841,19 @@ router.get('/relations', async (req, res) => {
 
         if (row.documentID) {
           edges.push({
-            from: row.personID,
+            from: row.id,
             to: row.documentID,
             type: 'document'
           });
         } else if (row.organizationID) {
           edges.push({
-            from: row.personID,
+            from: row.id,
             to: row.organizationID,
             type: 'organization'
           });
         } else if (row.religionID) {
           edges.push({
-            from: row.personID,
+            from: row.id,
             to: row.religionID,
             type: 'religion'
           });
@@ -821,7 +870,6 @@ router.get('/relations', async (req, res) => {
     res.status(500).json({ error: 'Failed to run query' });
   }
 });
-
 
 
 module.exports = router
