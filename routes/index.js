@@ -887,39 +887,46 @@ router.get('/relations', async (req, res) => {
       const edges = [];
 
       rows.forEach(row => {
-        const node = {
-          id: row.id,
-          firstName: capitalizeName(row.firstName),
-          middleName: capitalizeName(row.middleName),
-          lastName: capitalizeName(row.lastName),
-          fullName: capitalizeName(row.fullName),
-          suffix: row.suffix,
-          biography: row.biography,
-          gender: row.gender,
-          birthDate: row.birthDate,
-          deathDate: row.deathDate,
-          last_prefix: row.last_prefix,
-          LODwikiData: row.LODwikiData,
-          LODVIAF: row.LODVIAF,
-          LODLOC: row.LODLOC,
-          first_prefix_id: row.first_prefix_id,
-          last_prefix_id: row.last_prefix_id,
-          suffix_id: row.suffix_id,
-          language_id: row.language_id,
-          personStdName: row.personStdName,
-          nodeType: row.nodeType,
-          organizationName: row.organizationName,
-          formationDate: row.formationDate,
-          dissolutionDate: row.dissolutionDate,
-          organizationLOD: row.organizationLOD,
-          religionDesc: row.religionDesc
-        };
-
-        if (!nodes.some(n => n.id === node.id && n.nodeType === node.nodeType)) {
+        let node = nodes.find(n => n.id === row.id && n.nodeType === row.nodeType);
+        if (!node) {
+          node = {
+            id: row.id,
+            firstName: capitalizeName(row.firstName),
+            middleName: capitalizeName(row.middleName),
+            lastName: capitalizeName(row.lastName),
+            fullName: capitalizeName(row.fullName),
+            suffix: row.suffix,
+            biography: row.biography,
+            gender: row.gender,
+            birthDate: row.birthDate,
+            deathDate: row.deathDate,
+            last_prefix: row.last_prefix,
+            LODwikiData: row.LODwikiData,
+            LODVIAF: row.LODVIAF,
+            LODLOC: row.LODLOC,
+            first_prefix_id: row.first_prefix_id,
+            last_prefix_id: row.last_prefix_id,
+            suffix_id: row.suffix_id,
+            language_id: row.language_id,
+            personStdName: row.personStdName,
+            nodeType: row.nodeType,
+            organizationName: row.organizationName,
+            formationDate: row.formationDate,
+            dissolutionDate: row.dissolutionDate,
+            organizationLOD: row.organizationLOD,
+            religionDesc: row.religionDesc,
+            receivedDocuments: [],
+            sentDocuments: []
+          };
           nodes.push(node);
         }
 
         if (row.documentID) {
+          if (row.nodeType === 'document') {
+            node.sentDocuments.push(row.documentID);
+          } else {
+            node.receivedDocuments.push(row.documentID);
+          }
           edges.push({
             from: row.id,
             to: row.documentID,
