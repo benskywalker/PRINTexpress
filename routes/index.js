@@ -640,6 +640,12 @@ router.get('/sender_receiver', async (req, res) => {
 
 
 
+// Helper function to capitalize the first letter of each word
+function capitalizeName(name) {
+  if (!name) return '';
+  return name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+
 // This is the relations route
 // It will gather all the nodes and edges for the graph
 // The nodes will come from the person and organization tables
@@ -883,10 +889,10 @@ router.get('/relations', async (req, res) => {
       rows.forEach(row => {
         const node = {
           id: row.id,
-          firstName: row.firstName,
-          middleName: row.middleName,
-          lastName: row.lastName,
-          fullName: row.fullName,
+          firstName: capitalizeName(row.firstName),
+          middleName: capitalizeName(row.middleName),
+          lastName: capitalizeName(row.lastName),
+          fullName: capitalizeName(row.fullName),
           suffix: row.suffix,
           biography: row.biography,
           gender: row.gender,
@@ -953,5 +959,4 @@ router.get('/relations', async (req, res) => {
     res.status(500).json({ error: 'Failed to run query' });
   }
 });
-
 module.exports = router
