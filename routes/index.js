@@ -705,11 +705,14 @@ function capitalizeName(name) {
   NULL AS formationDate,
   NULL AS dissolutionDate,
   NULL AS organizationLOD,
-  NULL AS religionDesc
+  NULL AS religionDesc,
+  NULL AS senderFullName,
+  NULL AS receiverFullName,
+  NULL AS date
 FROM person p
 UNION
 SELECT
-  -- Select person to document relationship details
+  -- Select person to document relationship details and sender/receiver information
   p2d.personID AS id,
   p.firstName,
   p.middleName,
@@ -756,7 +759,17 @@ SELECT
   NULL AS formationDate,
   NULL AS dissolutionDate,
   NULL AS organizationLOD,
-  NULL AS religionDesc
+  NULL AS religionDesc,
+  -- Subqueries to get sender and receiver full names using GROUP_CONCAT
+  (SELECT GROUP_CONCAT(CONCAT(p1.firstName, ' ', p1.lastName) SEPARATOR ', ')
+   FROM person2document p2d1
+   JOIN person p1 ON p2d1.personID = p1.personID
+   WHERE p2d1.docID = d.documentID AND p2d1.roleID = 1) AS senderFullName,
+  (SELECT GROUP_CONCAT(CONCAT(p2.firstName, ' ', p2.lastName) SEPARATOR ', ')
+   FROM person2document p2d2
+   JOIN person p2 ON p2d2.personID = p2.personID
+   WHERE p2d2.docID = d.documentID AND p2d2.roleID = 2) AS receiverFullName,
+  DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date
 FROM person2document p2d
 JOIN person p ON p2d.personID = p.personID
 JOIN document d ON p2d.docID = d.documentID
@@ -809,7 +822,10 @@ SELECT
   NULL AS formationDate,
   NULL AS dissolutionDate,
   NULL AS organizationLOD,
-  NULL AS religionDesc
+  NULL AS religionDesc,
+  NULL AS senderFullName,
+  NULL AS receiverFullName,
+  NULL AS date
 FROM person2organization p2o
 JOIN person p ON p2o.personID = p.personID
 UNION
@@ -861,7 +877,10 @@ SELECT
   NULL AS formationDate,
   NULL AS dissolutionDate,
   NULL AS organizationLOD,
-  NULL AS religionDesc
+  NULL AS religionDesc,
+  NULL AS senderFullName,
+  NULL AS receiverFullName,
+  NULL AS date
 FROM person2religion p2r
 JOIN person p ON p2r.personID = p.personID
 UNION
@@ -913,7 +932,10 @@ SELECT
   o.formationDate,
   o.dissolutionDate,
   o.organizationLOD,
-  NULL AS religionDesc
+  NULL AS religionDesc,
+  NULL AS senderFullName,
+  NULL AS receiverFullName,
+  NULL AS date
 FROM organization o
 UNION
 SELECT
@@ -964,7 +986,10 @@ SELECT
   NULL AS formationDate,
   NULL AS dissolutionDate,
   NULL AS organizationLOD,
-  r.religionDesc AS religionDesc
+  r.religionDesc AS religionDesc,
+  NULL AS senderFullName,
+  NULL AS receiverFullName,
+  NULL AS date
 FROM religion r
 UNION
 SELECT
@@ -1015,9 +1040,13 @@ SELECT
   NULL AS formationDate,
   NULL AS dissolutionDate,
   NULL AS organizationLOD,
-  NULL AS religionDesc
+  NULL AS religionDesc,
+  NULL AS senderFullName,
+  NULL AS receiverFullName,
+  NULL AS date
 FROM relationship rel;
-`;
+
+  `;
 
 
 
@@ -1064,7 +1093,6 @@ FROM relationship rel;
             }
 
             if (row.documentID) {
-              console.log(row);
               edges.push({
                 from: row.id,
                 to: row.documentID,
@@ -1085,7 +1113,11 @@ FROM relationship rel;
                 folder: row.folder,
                 transcription: row.transcription,
                 translation: row.translation,
-                virtual_doc: row.virtual_doc    
+                virtual_doc: row.virtual_doc,
+                senderFullName: row.senderFullName,
+                receiverFullName: row.receiverFullName,
+                documentID: row.documentID,
+                date: row.date
               });
               console.log(row);
             } else if (row.organizationID) {
