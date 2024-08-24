@@ -656,6 +656,7 @@ router.get('/relations', async (req, res) => {
       p.firstName,
       p.middleName,
       p.lastName,
+      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
       p.suffix,
       p.biography,
       p.gender,
@@ -686,6 +687,7 @@ router.get('/relations', async (req, res) => {
       p.firstName,
       p.middleName,
       p.lastName,
+      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
       p.suffix,
       p.biography,
       p.gender,
@@ -717,6 +719,7 @@ router.get('/relations', async (req, res) => {
       p.firstName,
       p.middleName,
       p.lastName,
+      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
       p.suffix,
       p.biography,
       p.gender,
@@ -748,6 +751,7 @@ router.get('/relations', async (req, res) => {
       p.firstName,
       p.middleName,
       p.lastName,
+      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
       p.suffix,
       p.biography,
       p.gender,
@@ -779,6 +783,7 @@ router.get('/relations', async (req, res) => {
       NULL AS firstName,
       NULL AS middleName,
       NULL AS lastName,
+      NULL AS fullName,
       NULL AS suffix,
       NULL AS biography,
       NULL AS gender,
@@ -809,6 +814,7 @@ router.get('/relations', async (req, res) => {
       NULL AS firstName,
       NULL AS middleName,
       NULL AS lastName,
+      NULL AS fullName,
       NULL AS suffix,
       NULL AS biography,
       NULL AS gender,
@@ -839,6 +845,7 @@ router.get('/relations', async (req, res) => {
       NULL AS firstName,
       NULL AS middleName,
       NULL AS lastName,
+      NULL AS fullName,
       NULL AS suffix,
       NULL AS biography,
       NULL AS gender,
@@ -879,6 +886,7 @@ router.get('/relations', async (req, res) => {
           firstName: row.firstName,
           middleName: row.middleName,
           lastName: row.lastName,
+          fullName: row.fullName,
           suffix: row.suffix,
           biography: row.biography,
           gender: row.gender,
@@ -945,6 +953,5 @@ router.get('/relations', async (req, res) => {
     res.status(500).json({ error: 'Failed to run query' });
   }
 });
-
 
 module.exports = router
