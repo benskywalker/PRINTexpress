@@ -646,324 +646,323 @@ function capitalizeName(name) {
   return name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
-// This is the relations route
-// It will gather all the nodes and edges for the graph
-// The nodes will come from the person and organization tables
-// The edges will come from the person2document, person2organization, person2religion, and relationship tables
-// The edges will be between the person and the document, organization, religion, or another person
-// Each node will store all the person's or organization's information
-// The query will use joins to get all the information needed
-router.get('/relations', async (req, res) => {
-  console.log('GET request received');
+    // This is the relations route
+    // It will gather all the nodes and edges for the graph
+    // The nodes will come from the person and organization tables
+    // The edges will come from the person2document, person2organization, person2religion, and relationship tables
+    // The edges will be between the person and the document, organization, religion, or another person
+    // Each node will store all the person's or organization's information
+    // The query will use joins to get all the information needed
+    router.get('/relations', async (req, res) => {
+      console.log('GET request received');
 
-  const query = `
-    SELECT
-      p.personID AS id,
-      p.firstName,
-      p.middleName,
-      p.lastName,
-      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
-      p.suffix,
-      p.biography,
-      p.gender,
-      p.birthDate,
-      p.deathDate,
-      p.last_prefix,
-      p.LODwikiData,
-      p.LODVIAF,
-      p.LODLOC,
-      p.first_prefix_id,
-      p.last_prefix_id,
-      p.suffix_id,
-      p.language_id,
-      p.personStdName,
-      'person' AS nodeType,
-      NULL AS documentID,
-      NULL AS organizationID,
-      NULL AS religionID,
-      NULL AS organizationName,
-      NULL AS formationDate,
-      NULL AS dissolutionDate,
-      NULL AS organizationLOD,
-      NULL AS religionDesc
-    FROM person p
-    UNION
-    SELECT
-      p2d.personID AS id,
-      p.firstName,
-      p.middleName,
-      p.lastName,
-      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
-      p.suffix,
-      p.biography,
-      p.gender,
-      p.birthDate,
-      p.deathDate,
-      p.last_prefix,
-      p.LODwikiData,
-      p.LODVIAF,
-      p.LODLOC,
-      p.first_prefix_id,
-      p.last_prefix_id,
-      p.suffix_id,
-      p.language_id,
-      p.personStdName,
-      'document' AS nodeType,
-      p2d.docID AS documentID,
-      NULL AS organizationID,
-      NULL AS religionID,
-      NULL AS organizationName,
-      NULL AS formationDate,
-      NULL AS dissolutionDate,
-      NULL AS organizationLOD,
-      NULL AS religionDesc
-    FROM person2document p2d
-    JOIN person p ON p2d.personID = p.personID
-    UNION
-    SELECT
-      p2o.personID AS id,
-      p.firstName,
-      p.middleName,
-      p.lastName,
-      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
-      p.suffix,
-      p.biography,
-      p.gender,
-      p.birthDate,
-      p.deathDate,
-      p.last_prefix,
-      p.LODwikiData,
-      p.LODVIAF,
-      p.LODLOC,
-      p.first_prefix_id,
-      p.last_prefix_id,
-      p.suffix_id,
-      p.language_id,
-      p.personStdName,
-      'organization' AS nodeType,
-      NULL AS documentID,
-      p2o.organizationID AS organizationID,
-      NULL AS religionID,
-      NULL AS organizationName,
-      NULL AS formationDate,
-      NULL AS dissolutionDate,
-      NULL AS organizationLOD,
-      NULL AS religionDesc
-    FROM person2organization p2o
-    JOIN person p ON p2o.personID = p.personID
-    UNION
-    SELECT
-      p2r.personID AS id,
-      p.firstName,
-      p.middleName,
-      p.lastName,
-      CONCAT(p.firstName, ' ', p.lastName) AS fullName,
-      p.suffix,
-      p.biography,
-      p.gender,
-      p.birthDate,
-      p.deathDate,
-      p.last_prefix,
-      p.LODwikiData,
-      p.LODVIAF,
-      p.LODLOC,
-      p.first_prefix_id,
-      p.last_prefix_id,
-      p.suffix_id,
-      p.language_id,
-      p.personStdName,
-      'religion' AS nodeType,
-      NULL AS documentID,
-      NULL AS organizationID,
-      p2r.religionID AS religionID,
-      NULL AS organizationName,
-      NULL AS formationDate,
-      NULL AS dissolutionDate,
-      NULL AS organizationLOD,
-      NULL AS religionDesc
-    FROM person2religion p2r
-    JOIN person p ON p2r.personID = p.personID
-    UNION
-    SELECT
-      o.organizationID AS id,
-      NULL AS firstName,
-      NULL AS middleName,
-      NULL AS lastName,
-      NULL AS fullName,
-      NULL AS suffix,
-      NULL AS biography,
-      NULL AS gender,
-      NULL AS birthDate,
-      NULL AS deathDate,
-      NULL AS last_prefix,
-      NULL AS LODwikiData,
-      NULL AS LODVIAF,
-      NULL AS LODLOC,
-      NULL AS first_prefix_id,
-      NULL AS last_prefix_id,
-      NULL AS suffix_id,
-      NULL AS language_id,
-      NULL AS personStdName,
-      'organization' AS nodeType,
-      NULL AS documentID,
-      NULL AS organizationID,
-      NULL AS religionID,
-      o.organizationName,
-      o.formationDate,
-      o.dissolutionDate,
-      o.organizationLOD,
-      NULL AS religionDesc
-    FROM organization o
-    UNION
-    SELECT
-      r.religionID AS id,
-      NULL AS firstName,
-      NULL AS middleName,
-      NULL AS lastName,
-      NULL AS fullName,
-      NULL AS suffix,
-      NULL AS biography,
-      NULL AS gender,
-      NULL AS birthDate,
-      NULL AS deathDate,
-      NULL AS last_prefix,
-      NULL AS LODwikiData,
-      NULL AS LODVIAF,
-      NULL AS LODLOC,
-      NULL AS first_prefix_id,
-      NULL AS last_prefix_id,
-      NULL AS suffix_id,
-      NULL AS language_id,
-      NULL AS personStdName,
-      'religion' AS nodeType,
-      NULL AS documentID,
-      NULL AS organizationID,
-      r.religionID AS religionID,
-      NULL AS organizationName,
-      NULL AS formationDate,
-      NULL AS dissolutionDate,
-      NULL AS organizationLOD,
-      r.religionDesc AS religionDesc
-    FROM religion r
-    UNION
-    SELECT
-      rel.relationshipID AS id,
-      NULL AS firstName,
-      NULL AS middleName,
-      NULL AS lastName,
-      NULL AS fullName,
-      NULL AS suffix,
-      NULL AS biography,
-      NULL AS gender,
-      NULL AS birthDate,
-      NULL AS deathDate,
-      NULL AS last_prefix,
-      NULL AS LODwikiData,
-      NULL AS LODVIAF,
-      NULL AS LODLOC,
-      NULL AS first_prefix_id,
-      NULL AS last_prefix_id,
-      NULL AS suffix_id,
-      NULL AS language_id,
-      NULL AS personStdName,
-      'relationship' AS nodeType,
-      NULL AS documentID,
-      NULL AS organizationID,
-      NULL AS religionID,
-      NULL AS organizationName,
-      NULL AS formationDate,
-      NULL AS dissolutionDate,
-      NULL AS organizationLOD,
-      NULL AS religionDesc
-    FROM relationship rel
-  `;
+      const query = `
+        SELECT
+          p.personID AS id,
+          p.firstName,
+          p.middleName,
+          p.lastName,
+          CONCAT(p.firstName, ' ', p.lastName) AS fullName,
+          p.suffix,
+          p.biography,
+          p.gender,
+          p.birthDate,
+          p.deathDate,
+          p.last_prefix,
+          p.LODwikiData,
+          p.LODVIAF,
+          p.LODLOC,
+          p.first_prefix_id,
+          p.last_prefix_id,
+          p.suffix_id,
+          p.language_id,
+          p.personStdName,
+          'person' AS nodeType,
+          NULL AS documentID,
+          NULL AS organizationID,
+          NULL AS religionID,
+          NULL AS organizationName,
+          NULL AS formationDate,
+          NULL AS dissolutionDate,
+          NULL AS organizationLOD,
+          NULL AS religionDesc
+        FROM person p
+        UNION
+        SELECT
+          p2d.personID AS id,
+          p.firstName,
+          p.middleName,
+          p.lastName,
+          CONCAT(p.firstName, ' ', p.lastName) AS fullName,
+          p.suffix,
+          p.biography,
+          p.gender,
+          p.birthDate,
+          p.deathDate,
+          p.last_prefix,
+          p.LODwikiData,
+          p.LODVIAF,
+          p.LODLOC,
+          p.first_prefix_id,
+          p.last_prefix_id,
+          p.suffix_id,
+          p.language_id,
+          p.personStdName,
+          'document' AS nodeType,
+          p2d.docID AS documentID,
+          NULL AS organizationID,
+          NULL AS religionID,
+          NULL AS organizationName,
+          NULL AS formationDate,
+          NULL AS dissolutionDate,
+          NULL AS organizationLOD,
+          NULL AS religionDesc
+        FROM person2document p2d
+        JOIN person p ON p2d.personID = p.personID
+        UNION
+        SELECT
+          p2o.personID AS id,
+          p.firstName,
+          p.middleName,
+          p.lastName,
+          CONCAT(p.firstName, ' ', p.lastName) AS fullName,
+          p.suffix,
+          p.biography,
+          p.gender,
+          p.birthDate,
+          p.deathDate,
+          p.last_prefix,
+          p.LODwikiData,
+          p.LODVIAF,
+          p.LODLOC,
+          p.first_prefix_id,
+          p.last_prefix_id,
+          p.suffix_id,
+          p.language_id,
+          p.personStdName,
+          'organization' AS nodeType,
+          NULL AS documentID,
+          p2o.organizationID AS organizationID,
+          NULL AS religionID,
+          NULL AS organizationName,
+          NULL AS formationDate,
+          NULL AS dissolutionDate,
+          NULL AS organizationLOD,
+          NULL AS religionDesc
+        FROM person2organization p2o
+        JOIN person p ON p2o.personID = p.personID
+        UNION
+        SELECT
+          p2r.personID AS id,
+          p.firstName,
+          p.middleName,
+          p.lastName,
+          CONCAT(p.firstName, ' ', p.lastName) AS fullName,
+          p.suffix,
+          p.biography,
+          p.gender,
+          p.birthDate,
+          p.deathDate,
+          p.last_prefix,
+          p.LODwikiData,
+          p.LODVIAF,
+          p.LODLOC,
+          p.first_prefix_id,
+          p.last_prefix_id,
+          p.suffix_id,
+          p.language_id,
+          p.personStdName,
+          'religion' AS nodeType,
+          NULL AS documentID,
+          NULL AS organizationID,
+          p2r.religionID AS religionID,
+          NULL AS organizationName,
+          NULL AS formationDate,
+          NULL AS dissolutionDate,
+          NULL AS organizationLOD,
+          NULL AS religionDesc
+        FROM person2religion p2r
+        JOIN person p ON p2r.personID = p.personID
+        UNION
+        SELECT
+          o.organizationID AS id,
+          NULL AS firstName,
+          NULL AS middleName,
+          NULL AS lastName,
+          NULL AS fullName,
+          NULL AS suffix,
+          NULL AS biography,
+          NULL AS gender,
+          NULL AS birthDate,
+          NULL AS deathDate,
+          NULL AS last_prefix,
+          NULL AS LODwikiData,
+          NULL AS LODVIAF,
+          NULL AS LODLOC,
+          NULL AS first_prefix_id,
+          NULL AS last_prefix_id,
+          NULL AS suffix_id,
+          NULL AS language_id,
+          NULL AS personStdName,
+          'organization' AS nodeType,
+          NULL AS documentID,
+          NULL AS organizationID,
+          NULL AS religionID,
+          o.organizationName,
+          o.formationDate,
+          o.dissolutionDate,
+          o.organizationLOD,
+          NULL AS religionDesc
+        FROM organization o
+        UNION
+        SELECT
+          r.religionID AS id,
+          NULL AS firstName,
+          NULL AS middleName,
+          NULL AS lastName,
+          NULL AS fullName,
+          NULL AS suffix,
+          NULL AS biography,
+          NULL AS gender,
+          NULL AS birthDate,
+          NULL AS deathDate,
+          NULL AS last_prefix,
+          NULL AS LODwikiData,
+          NULL AS LODVIAF,
+          NULL AS LODLOC,
+          NULL AS first_prefix_id,
+          NULL AS last_prefix_id,
+          NULL AS suffix_id,
+          NULL AS language_id,
+          NULL AS personStdName,
+          'religion' AS nodeType,
+          NULL AS documentID,
+          NULL AS organizationID,
+          r.religionID AS religionID,
+          NULL AS organizationName,
+          NULL AS formationDate,
+          NULL AS dissolutionDate,
+          NULL AS organizationLOD,
+          r.religionDesc AS religionDesc
+        FROM religion r
+        UNION
+        SELECT
+          rel.relationshipID AS id,
+          NULL AS firstName,
+          NULL AS middleName,
+          NULL AS lastName,
+          NULL AS fullName,
+          NULL AS suffix,
+          NULL AS biography,
+          NULL AS gender,
+          NULL AS birthDate,
+          NULL AS deathDate,
+          NULL AS last_prefix,
+          NULL AS LODwikiData,
+          NULL AS LODVIAF,
+          NULL AS LODLOC,
+          NULL AS first_prefix_id,
+          NULL AS last_prefix_id,
+          NULL AS suffix_id,
+          NULL AS language_id,
+          NULL AS personStdName,
+          'relationship' AS nodeType,
+          NULL AS documentID,
+          NULL AS organizationID,
+          NULL AS religionID,
+          NULL AS organizationName,
+          NULL AS formationDate,
+          NULL AS dissolutionDate,
+          NULL AS organizationLOD,
+          NULL AS religionDesc
+        FROM relationship rel
+      `;
 
-  try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
+      try {
+        const db = await dbPromise;
+        const promisePool = db.promise();
 
-    promisePool.query(query).then(([rows, fields]) => {
-      const nodes = [];
-      const edges = [];
+        promisePool.query(query).then(([rows, fields]) => {
+          const nodes = [];
+          const edges = [];
 
-      rows.forEach(row => {
-        let node = nodes.find(n => n.id === row.id && n.nodeType === row.nodeType);
-        if (!node) {
-          node = {
-            id: row.id,
-            firstName: capitalizeName(row.firstName),
-            middleName: capitalizeName(row.middleName),
-            lastName: capitalizeName(row.lastName),
-            fullName: capitalizeName(row.fullName),
-            suffix: row.suffix,
-            biography: row.biography,
-            gender: row.gender,
-            birthDate: row.birthDate,
-            deathDate: row.deathDate,
-            last_prefix: row.last_prefix,
-            LODwikiData: row.LODwikiData,
-            LODVIAF: row.LODVIAF,
-            LODLOC: row.LODLOC,
-            first_prefix_id: row.first_prefix_id,
-            last_prefix_id: row.last_prefix_id,
-            suffix_id: row.suffix_id,
-            language_id: row.language_id,
-            personStdName: row.personStdName,
-            nodeType: row.nodeType,
-            organizationName: row.organizationName,
-            formationDate: row.formationDate,
-            dissolutionDate: row.dissolutionDate,
-            organizationLOD: row.organizationLOD,
-            religionDesc: row.religionDesc,
-            documents: []
-          };
-          nodes.push(node);
-        }
+          rows.forEach(row => {
+            let node = nodes.find(n => n.id === row.id && n.nodeType === row.nodeType);
+            if (!node) {
+              node = {
+                id: row.id,
+                firstName: capitalizeName(row.firstName),
+                middleName: capitalizeName(row.middleName),
+                lastName: capitalizeName(row.lastName),
+                fullName: capitalizeName(row.fullName),
+                suffix: row.suffix,
+                biography: row.biography,
+                gender: row.gender,
+                birthDate: row.birthDate,
+                deathDate: row.deathDate,
+                last_prefix: row.last_prefix,
+                LODwikiData: row.LODwikiData,
+                LODVIAF: row.LODVIAF,
+                LODLOC: row.LODLOC,
+                first_prefix_id: row.first_prefix_id,
+                last_prefix_id: row.last_prefix_id,
+                suffix_id: row.suffix_id,
+                language_id: row.language_id,
+                personStdName: row.personStdName,
+                nodeType: row.nodeType,
+                organizationName: row.organizationName,
+                formationDate: row.formationDate,
+                dissolutionDate: row.dissolutionDate,
+                organizationLOD: row.organizationLOD,
+                religionDesc: row.religionDesc,
+                documents: []
+              };
+              nodes.push(node);
+            }
 
-        if (row.documentID) {
-          node.documents.push({
-            documentID: row.documentID,
-            type: row.nodeType === 'document' ? 'sent' : 'received'
+            if (row.documentID) {
+              edges.push({
+                from: row.id,
+                to: row.documentID,
+                type: 'document'
+              });
+            } else if (row.organizationID) {
+              edges.push({
+                from: row.id,
+                to: row.organizationID,
+                type: 'organization'
+              });
+            } else if (row.religionID) {
+              edges.push({
+                from: row.id,
+                to: row.religionID,
+                type: 'religion'
+              });
+            } else if (row.relationshipID) {
+              edges.push({
+                from: row.person1ID,
+                to: row.person2ID,
+                type: 'relationship',
+                relationship1to2ID: row.relationship1to2ID,
+                relationship2to1ID: row.relationship2to1ID,
+                uncertain: row.uncertain
+              });
+            }
           });
-          edges.push({
-            from: row.id,
-            to: row.documentID,
-            type: 'document'
-          });
-        } else if (row.organizationID) {
-          edges.push({
-            from: row.id,
-            to: row.organizationID,
-            type: 'organization'
-          });
-        } else if (row.religionID) {
-          edges.push({
-            from: row.id,
-            to: row.religionID,
-            type: 'religion'
-          });
-        } else if (row.relationshipID) {
-          edges.push({
-            from: row.person1ID,
-            to: row.person2ID,
-            type: 'relationship',
-            relationship1to2ID: row.relationship1to2ID,
-            relationship2to1ID: row.relationship2to1ID,
-            uncertain: row.uncertain
-          });
-        }
-      });
 
-      res.json({ nodes, edges });
-    }).catch(error => {
-      console.error('Failed to run query:', error);
-      res.status(500).json({ error: 'Failed to run query' });
+          res.json({ nodes, edges });
+        }).catch(error => {
+          console.error('Failed to run query:', error);
+          res.status(500).json({ error: 'Failed to run query' });
+        });
+      } catch (error) {
+        console.error('Failed to run query:', error);
+        res.status(500).json({ error: 'Failed to run query' });
+      }
     });
-  } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
-  }
-});
+
+
+
 module.exports = router;
 
 
