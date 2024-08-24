@@ -1119,7 +1119,6 @@ FROM relationship rel;
                 documentID: row.documentID,
                 date: row.date
               });
-              console.log(row);
             } else if (row.organizationID) {
               edges.push({
                 from: row.id,
