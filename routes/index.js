@@ -915,18 +915,16 @@ router.get('/relations', async (req, res) => {
             dissolutionDate: row.dissolutionDate,
             organizationLOD: row.organizationLOD,
             religionDesc: row.religionDesc,
-            receivedDocuments: [],
-            sentDocuments: []
+            documents: []
           };
           nodes.push(node);
         }
 
         if (row.documentID) {
-          if (row.nodeType === 'document') {
-            node.sentDocuments.push(row.documentID);
-          } else {
-            node.receivedDocuments.push(row.documentID);
-          }
+          node.documents.push({
+            documentID: row.documentID,
+            type: row.nodeType === 'document' ? 'sent' : 'received'
+          });
           edges.push({
             from: row.id,
             to: row.documentID,
@@ -966,4 +964,6 @@ router.get('/relations', async (req, res) => {
     res.status(500).json({ error: 'Failed to run query' });
   }
 });
-module.exports = router
+module.exports = router;
+
+
