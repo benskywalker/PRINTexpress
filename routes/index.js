@@ -643,8 +643,8 @@ router.get('/sender_receiver', async (req, res) => {
 // This is the relations route
 // It will gather all the nodes and edges for the graph
 // The nodes will come from the person and organization tables
-// The edges will come from the person2document, person2organization, and person2religion tables
-// The edges will be between the person and the document, organization, or religion
+// The edges will come from the person2document, person2organization, person2religion, and relationship tables
+// The edges will be between the person and the document, organization, religion, or another person
 // Each node will store all the person's or organization's information
 // The query will use joins to get all the information needed
 router.get('/relations', async (req, res) => {
@@ -833,6 +833,36 @@ router.get('/relations', async (req, res) => {
       NULL AS organizationLOD,
       r.religionDesc AS religionDesc
     FROM religion r
+    UNION
+    SELECT
+      rel.relationshipID AS id,
+      NULL AS firstName,
+      NULL AS middleName,
+      NULL AS lastName,
+      NULL AS suffix,
+      NULL AS biography,
+      NULL AS gender,
+      NULL AS birthDate,
+      NULL AS deathDate,
+      NULL AS last_prefix,
+      NULL AS LODwikiData,
+      NULL AS LODVIAF,
+      NULL AS LODLOC,
+      NULL AS first_prefix_id,
+      NULL AS last_prefix_id,
+      NULL AS suffix_id,
+      NULL AS language_id,
+      NULL AS personStdName,
+      'relationship' AS nodeType,
+      NULL AS documentID,
+      NULL AS organizationID,
+      NULL AS religionID,
+      NULL AS organizationName,
+      NULL AS formationDate,
+      NULL AS dissolutionDate,
+      NULL AS organizationLOD,
+      NULL AS religionDesc
+    FROM relationship rel
   `;
 
   try {
@@ -892,6 +922,15 @@ router.get('/relations', async (req, res) => {
             from: row.id,
             to: row.religionID,
             type: 'religion'
+          });
+        } else if (row.relationshipID) {
+          edges.push({
+            from: row.person1ID,
+            to: row.person2ID,
+            type: 'relationship',
+            relationship1to2ID: row.relationship1to2ID,
+            relationship2to1ID: row.relationship2to1ID,
+            uncertain: row.uncertain
           });
         }
       });
