@@ -677,7 +677,8 @@ router.get('/relations', async (req, res) => {
       NULL AS organizationName,
       NULL AS formationDate,
       NULL AS dissolutionDate,
-      NULL AS organizationLOD
+      NULL AS organizationLOD,
+      NULL AS religionDesc
     FROM person p
     UNION
     SELECT
@@ -706,7 +707,8 @@ router.get('/relations', async (req, res) => {
       NULL AS organizationName,
       NULL AS formationDate,
       NULL AS dissolutionDate,
-      NULL AS organizationLOD
+      NULL AS organizationLOD,
+      NULL AS religionDesc
     FROM person2document p2d
     JOIN person p ON p2d.personID = p.personID
     UNION
@@ -736,7 +738,8 @@ router.get('/relations', async (req, res) => {
       NULL AS organizationName,
       NULL AS formationDate,
       NULL AS dissolutionDate,
-      NULL AS organizationLOD
+      NULL AS organizationLOD,
+      NULL AS religionDesc
     FROM person2organization p2o
     JOIN person p ON p2o.personID = p.personID
     UNION
@@ -766,7 +769,8 @@ router.get('/relations', async (req, res) => {
       NULL AS organizationName,
       NULL AS formationDate,
       NULL AS dissolutionDate,
-      NULL AS organizationLOD
+      NULL AS organizationLOD,
+      NULL AS religionDesc
     FROM person2religion p2r
     JOIN person p ON p2r.personID = p.personID
     UNION
@@ -796,8 +800,39 @@ router.get('/relations', async (req, res) => {
       o.organizationName,
       o.formationDate,
       o.dissolutionDate,
-      o.organizationLOD
+      o.organizationLOD,
+      NULL AS religionDesc
     FROM organization o
+    UNION
+    SELECT
+      r.religionID AS id,
+      NULL AS firstName,
+      NULL AS middleName,
+      NULL AS lastName,
+      NULL AS suffix,
+      NULL AS biography,
+      NULL AS gender,
+      NULL AS birthDate,
+      NULL AS deathDate,
+      NULL AS last_prefix,
+      NULL AS LODwikiData,
+      NULL AS LODVIAF,
+      NULL AS LODLOC,
+      NULL AS first_prefix_id,
+      NULL AS last_prefix_id,
+      NULL AS suffix_id,
+      NULL AS language_id,
+      NULL AS personStdName,
+      'religion' AS nodeType,
+      NULL AS documentID,
+      NULL AS organizationID,
+      r.religionID AS religionID,
+      NULL AS organizationName,
+      NULL AS formationDate,
+      NULL AS dissolutionDate,
+      NULL AS organizationLOD,
+      r.religionDesc AS religionDesc
+    FROM religion r
   `;
 
   try {
@@ -832,7 +867,8 @@ router.get('/relations', async (req, res) => {
           organizationName: row.organizationName,
           formationDate: row.formationDate,
           dissolutionDate: row.dissolutionDate,
-          organizationLOD: row.organizationLOD
+          organizationLOD: row.organizationLOD,
+          religionDesc: row.religionDesc
         };
 
         if (!nodes.some(n => n.id === node.id && n.nodeType === node.nodeType)) {
