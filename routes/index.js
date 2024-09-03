@@ -1,12 +1,12 @@
 // routes/index.js
-const express = require('express')
-const router = express.Router()
+const express = require("express");
+const router = express.Router();
 
 // Import the database connection
-const dbPromise = require('../db')
+const dbPromise = require("../db");
 
-router.get('/', async (req, res) => {
-  console.log('GET request received')
+router.get("/", async (req, res) => {
+  console.log("GET request received");
 
   // Define the query
   const query = `SELECT
@@ -111,99 +111,99 @@ LEFT JOIN mentions m ON p.personID = m.personID
 LEFT JOIN mentiontype mt ON m.mentiontypeID = mt.mentiontypeID
 LEFT JOIN mention_nodes mn ON m.mentionNodeID = mn.mentionNodeID
 LEFT JOIN relatedletters rl ON p.personID = rl.documentID
-`
+`;
 
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
-async function runQuery (query) {
+async function runQuery(query) {
   // Get the database connection
-  const db = await dbPromise
-  const promisePool = db.promise()
+  const db = await dbPromise;
+  const promisePool = db.promise();
 
   try {
     promisePool.query(query).then(([rows, fields]) => {
-      return rows
-    })
+      return rows;
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
+    console.error("Failed to run query:", error);
   } finally {
     if (db && db.end) {
-      db.end()
+      db.end();
     }
   }
 }
 
 //get all persons
-router.get('/persons', async (req, res) => {
-  console.log('GET request received')
-  const query = `SELECT * FROM person`
+router.get("/persons", async (req, res) => {
+  console.log("GET request received");
+  const query = `SELECT * FROM person`;
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 //search for specific document
-router.get('/documents/:id', async (req, res) => {
-  console.log('GET request received')
-  const query = `SELECT * FROM document WHERE documentID = ${req.params.id}`
+router.get("/documents/:id", async (req, res) => {
+  console.log("GET request received");
+  const query = `SELECT * FROM document WHERE documentID = ${req.params.id}`;
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 //get person by name and wildcard search for uncomplete names
-router.get('/persons/:name', async (req, res) => {
-  console.log('GET request received')
-  const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`
+router.get("/persons/:name", async (req, res) => {
+  console.log("GET request received");
+  const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`;
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 //get all connections between persons and documents and join sender and receiver based on documentID
-router.get('/connections/:id', async (req, res) => {
-  console.log('GET request received')
+router.get("/connections/:id", async (req, res) => {
+  console.log("GET request received");
 
-  const personID = req.params.id
+  const personID = req.params.id;
 
   //get all senders from person2document
   //get all receivers from those senders
@@ -257,24 +257,24 @@ router.get('/connections/:id', async (req, res) => {
     p.personID != r.personID 
   AND (p.personID = ? OR r.personID = ?)
   ORDER BY
-    pd.docID`
+    pd.docID`;
 
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query, [personID, personID]).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 //get all documents sent and received by a person
-router.get('/documents', async (req, res) => {
-  console.log('GET request received')
+router.get("/documents", async (req, res) => {
+  console.log("GET request received");
 
   const query = `
     SELECT
@@ -324,29 +324,29 @@ router.get('/documents', async (req, res) => {
   WHERE
     p.personID != r.personID
   ORDER BY
-    pd.docID`
+    pd.docID`;
 
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool
       .query(query)
       .then(([rows, fields]) => {
-        res.json(rows)
+        res.json(rows);
       })
-      .catch(error => {
-        console.error('Failed to run query:', error)
-        res.status(500).json({ error: 'Failed to run query' })
-      })
+      .catch((error) => {
+        console.error("Failed to run query:", error);
+        res.status(500).json({ error: "Failed to run query" });
+      });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
   }
-})
+});
 
-router.get('/dates', async (req, res) => {
-  console.log('GET request received')
+router.get("/dates", async (req, res) => {
+  console.log("GET request received");
 
   //get all senders from person2document
   //get all receivers from those senders
@@ -363,47 +363,47 @@ router.get('/dates', async (req, res) => {
   WHERE
     p.personID != r.personID
   ORDER BY
-    d.sortingDate DESC`
+    d.sortingDate DESC`;
 
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 //get all connections for religion
-router.get('/connections/religion', async (req, res) => {
-  console.log('GET request received')
+router.get("/connections/religion", async (req, res) => {
+  console.log("GET request received");
 
   //get all people from person2religion
 
-  const query = ``
+  const query = ``;
 
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 //get all connections for organization
-router.get('/connections/organization', async (req, res) => {
-  console.log('GET request received')
+router.get("/connections/organization", async (req, res) => {
+  console.log("GET request received");
 
   //get all people from person2organization and specify what organization they are in
   const query = `
@@ -418,25 +418,25 @@ FROM
   person p
   INNER JOIN person2organization po ON p.personID = po.personID
   INNER JOIN organization org ON po.organizationID = org.organizationID
-  `
+  `;
 
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      res.json(rows)
-    })
+      res.json(rows);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 // get all senders for sender filter in frontend
-router.get('/senders', async (req, res) => {
-  console.log('GET request received')
+router.get("/senders", async (req, res) => {
+  console.log("GET request received");
 
   //get all senders from person2document
 
@@ -453,32 +453,32 @@ FROM
   INNER JOIN person2document pd ON p.personID = pd.personID
   INNER JOIN document d ON pd.docID = d.documentID
 
-  `
+  `;
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
       //format sender names as {sender: {name: 'John Doe', image: 'null'}}
-      const senders = rows.map(row => {
+      const senders = rows.map((row) => {
         return {
           name: `${row.firstName} ${row.lastName}`,
-          image: 'null'
-        }
-      })
+          image: "null",
+        };
+      });
 
-      res.json(senders)
-    })
+      res.json(senders);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
 // get all receivers for receiver filter in frontend
-router.get('/receivers', async (req, res) => {
-  console.log('GET request received')
+router.get("/receivers", async (req, res) => {
+  console.log("GET request received");
 
   //get all receivers from person2document
 
@@ -500,30 +500,30 @@ FROM
   WHERE
     p.personID != r.personID
 
-  `
+  `;
   try {
-    const db = await dbPromise
-    const promisePool = db.promise()
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
     promisePool.query(query).then(([rows, fields]) => {
-      const receivers = rows.map(row => {
+      const receivers = rows.map((row) => {
         return {
           name: `${row.firstName} ${row.lastName}`,
-          image: 'null'
-        }
-      })
-      res.json(receivers)
-    })
+          image: "null",
+        };
+      });
+      res.json(receivers);
+    });
   } catch (error) {
-    console.error('Failed to run query:', error)
-    res.status(500).json({ error: 'Failed to run query' })
-    return
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
   }
-})
+});
 
-router.get('/sender_receiver', async (req, res) => {
-  console.log('GET request received');
-  
+router.get("/sender_receiver", async (req, res) => {
+  console.log("GET request received");
+
   const query = `
   SELECT
     sender.personID AS senderID,
@@ -578,85 +578,89 @@ router.get('/sender_receiver', async (req, res) => {
     const db = await dbPromise;
     const promisePool = db.promise();
 
-    promisePool.query(query).then(([rows, fields]) => {
-      const relation = rows.map(row => {
-        return {
-          sender: {
-            id: row.senderID,
-            name: row.senderName,
-            firstName: row.senderFirstName,
-            middleName: row.senderMiddleName,
-            lastName: row.senderLastName,
-            suffix: row.senderSuffix,
-            biography: row.senderBiography,
-            image: 'null'
-          },
-          receiver: {
-            id: row.receiverID,
-            name: row.receiverName,
-            firstName: row.receiverFirstName,
-            middleName: row.receiverMiddleName,
-            lastName: row.receiverLastName,
-            suffix: row.receiverSuffix,
-            biography: row.receiverBiography,
-            image: 'null'
-          },
-          document: {
-            id: row.documentID,
-            importID: row.importID,
-            collection: row.collection,
-            abstract: row.abstract,
-            date: row.date,
-            letterDate: row.letterDate,
-            isJulian: row.isJulian,
-            researchNotes: row.researchNotes,
-            customCitation: row.customCitation,
-            docTypeID: row.docTypeID,
-            documentLanguageID: row.documentLanguageID,
-            repositoryID: row.repositoryID,
-            dateAdded: row.dateAdded,
-            status: row.status,
-            whoCheckedOut: row.whoCheckedOut,
-            volume: row.volume,
-            page: row.page,
-            folder: row.folder,
-            transcription: row.transcription,
-            translation: row.translation,
-            virtual_doc: row.virtual_doc,
-            pdfURL: row.pdfURL
-          }
-        };
+    promisePool
+      .query(query)
+      .then(([rows, fields]) => {
+        const relation = rows.map((row) => {
+          return {
+            sender: {
+              id: row.senderID,
+              name: row.senderName,
+              firstName: row.senderFirstName,
+              middleName: row.senderMiddleName,
+              lastName: row.senderLastName,
+              suffix: row.senderSuffix,
+              biography: row.senderBiography,
+              image: "null",
+            },
+            receiver: {
+              id: row.receiverID,
+              name: row.receiverName,
+              firstName: row.receiverFirstName,
+              middleName: row.receiverMiddleName,
+              lastName: row.receiverLastName,
+              suffix: row.receiverSuffix,
+              biography: row.receiverBiography,
+              image: "null",
+            },
+            document: {
+              id: row.documentID,
+              importID: row.importID,
+              collection: row.collection,
+              abstract: row.abstract,
+              date: row.date,
+              letterDate: row.letterDate,
+              isJulian: row.isJulian,
+              researchNotes: row.researchNotes,
+              customCitation: row.customCitation,
+              docTypeID: row.docTypeID,
+              documentLanguageID: row.documentLanguageID,
+              repositoryID: row.repositoryID,
+              dateAdded: row.dateAdded,
+              status: row.status,
+              whoCheckedOut: row.whoCheckedOut,
+              volume: row.volume,
+              page: row.page,
+              folder: row.folder,
+              transcription: row.transcription,
+              translation: row.translation,
+              virtual_doc: row.virtual_doc,
+              pdfURL: row.pdfURL,
+            },
+          };
+        });
+        res.json(relation);
+      })
+      .catch((error) => {
+        console.error("Failed to run query:", error);
+        res.status(500).json({ error: "Failed to run query" });
       });
-      res.json(relation);
-    }).catch(error => {
-      console.error('Failed to run query:', error);
-      res.status(500).json({ error: 'Failed to run query' });
-    });
   } catch (error) {
-    console.error('Failed to run query:', error);
-    res.status(500).json({ error: 'Failed to run query' });
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
   }
 });
 
-
-
 // Helper function to capitalize the first letter of each word
 function capitalizeName(name) {
-  if (!name) return '';
-  return name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  if (!name) return "";
+  return name
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
-    // This is the relations route
-    // It will gather all the nodes and edges for the graph
-    // The nodes will come from the person and organization tables
-    // The edges will come from the person2document, person2organization, person2religion, and relationship tables
-    // The edges will be between the person and the document, organization, religion, or another person
-    // Each node will store all the person's or organization's information
-    // The query will use joins to get all the information needed
-    router.get('/relations', async (req, res) => {
-      console.log('GET request received');
+// This is the relations route
+// It will gather all the nodes and edges for the graph
+// The nodes will come from the person and organization tables
+// The edges will come from the person2document, person2organization, person2religion, and relationship tables
+// The edges will be between the person and the document, organization, religion, or another person
+// Each node will store all the person's or organization's information
+// The query will use joins to get all the information needed
+router.get("/relations", async (req, res) => {
+  console.log("GET request received");
 
-      const query = `
+  const query = `
         SELECT
   -- Select person details
   p.personID AS id,
@@ -1048,123 +1052,222 @@ FROM relationship rel;
 
   `;
 
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
+    promisePool
+      .query(query)
+      .then(([rows, fields]) => {
+        const nodes = [];
+        const edges = [];
 
-      try {
-        const db = await dbPromise;
-        const promisePool = db.promise();
+        rows.forEach((row) => {
+          let node = nodes.find(
+            (n) => n.id === row.id && n.nodeType === row.nodeType
+          );
+          if (!node) {
+            node = {
+              id: row.id,
+              firstName: capitalizeName(row.firstName),
+              middleName: capitalizeName(row.middleName),
+              lastName: capitalizeName(row.lastName),
+              fullName: capitalizeName(row.fullName),
+              suffix: row.suffix,
+              biography: row.biography,
+              gender: row.gender,
+              birthDate: row.birthDate,
+              deathDate: row.deathDate,
+              last_prefix: row.last_prefix,
+              LODwikiData: row.LODwikiData,
+              LODVIAF: row.LODVIAF,
+              LODLOC: row.LODLOC,
+              first_prefix_id: row.first_prefix_id,
+              last_prefix_id: row.last_prefix_id,
+              suffix_id: row.suffix_id,
+              language_id: row.language_id,
+              personStdName: row.personStdName,
+              nodeType: row.nodeType,
+              organizationName: row.organizationName,
+              formationDate: row.formationDate,
+              dissolutionDate: row.dissolutionDate,
+              organizationLOD: row.organizationLOD,
+              religionDesc: row.religionDesc,
+              documents: [],
+            };
+            nodes.push(node);
+          }
 
-        promisePool.query(query).then(([rows, fields]) => {
-          const nodes = [];
-          const edges = [];
-
-          rows.forEach(row => {
-            let node = nodes.find(n => n.id === row.id && n.nodeType === row.nodeType);
-            if (!node) {
-              node = {
-                id: row.id,
-                firstName: capitalizeName(row.firstName),
-                middleName: capitalizeName(row.middleName),
-                lastName: capitalizeName(row.lastName),
-                fullName: capitalizeName(row.fullName),
-                suffix: row.suffix,
-                biography: row.biography,
-                gender: row.gender,
-                birthDate: row.birthDate,
-                deathDate: row.deathDate,
-                last_prefix: row.last_prefix,
-                LODwikiData: row.LODwikiData,
-                LODVIAF: row.LODVIAF,
-                LODLOC: row.LODLOC,
-                first_prefix_id: row.first_prefix_id,
-                last_prefix_id: row.last_prefix_id,
-                suffix_id: row.suffix_id,
-                language_id: row.language_id,
-                personStdName: row.personStdName,
-                nodeType: row.nodeType,
-                organizationName: row.organizationName,
-                formationDate: row.formationDate,
-                dissolutionDate: row.dissolutionDate,
-                organizationLOD: row.organizationLOD,
-                religionDesc: row.religionDesc,
-                documents: []
-              };
-              nodes.push(node);
-            }
-
-            if (row.documentID) {
-              edges.push({
-                from: row.id,
-                to: row.documentID,
-                type: 'document',
-                abstract: row.abstract,
-                letterDate: row.letterDate,
-                isJulian: row.isJulian,
-                researchNotes: row.researchNotes,
-                customCitation: row.customCitation,
-                docTypeID: row.docTypeID,
-                documentLanguageID: row.documentLanguageID,
-                repositoryID: row.repositoryID,
-                dateAdded: row.dateAdded,
-                status: row.status,
-                whoCheckedOut: row.whoCheckedOut,
-                volume: row.volume,
-                page: row.page,
-                folder: row.folder,
-                transcription: row.transcription,
-                translation: row.translation,
-                virtual_doc: row.virtual_doc,
-                senderFullName: row.senderFullName,
-                receiverFullName: row.receiverFullName,
-                documentID: row.documentID,
-                date: row.date
-              });
-            } else if (row.organizationID) {
-              edges.push({
-                from: row.id,
-                to: row.organizationID,
-                type: 'organization',
-                organizationName: row.organizationName,
-                formationDate: row.formationDate,
-                dissolutionDate: row.dissolutionDate,
-                organizationLOD: row.organizationLOD
-              });
-            } else if (row.religionID) {
-              edges.push({
-                from: row.id,
-                to: row.religionID,
-                type: 'religion',
-                religionDesc: row.religionDesc,
-                religionID: row.religionID
-              });
-            } else if (row.relationshipID) {
-              edges.push({
-                from: row.person1ID,
-                to: row.person2ID,
-                type: 'relationship',
-                relationship1to2ID: row.relationship1to2ID,
-                relationship2to1ID: row.relationship2to1ID,
-                uncertain: row.uncertain,
-                relationshipType: row.relationshipType,
-                relationshipDesc: row.relationshipDesc
-
-              });
-            }
-          });
-
-          res.json({ nodes, edges });
-        }).catch(error => {
-          console.error('Failed to run query:', error);
-          res.status(500).json({ error: 'Failed to run query' });
+          if (row.documentID) {
+            edges.push({
+              from: row.id,
+              to: row.documentID,
+              type: "document",
+              abstract: row.abstract,
+              letterDate: row.letterDate,
+              isJulian: row.isJulian,
+              researchNotes: row.researchNotes,
+              customCitation: row.customCitation,
+              docTypeID: row.docTypeID,
+              documentLanguageID: row.documentLanguageID,
+              repositoryID: row.repositoryID,
+              dateAdded: row.dateAdded,
+              status: row.status,
+              whoCheckedOut: row.whoCheckedOut,
+              volume: row.volume,
+              page: row.page,
+              folder: row.folder,
+              transcription: row.transcription,
+              translation: row.translation,
+              virtual_doc: row.virtual_doc,
+              senderFullName: row.senderFullName,
+              receiverFullName: row.receiverFullName,
+              documentID: row.documentID,
+              date: row.date,
+            });
+          } else if (row.organizationID) {
+            edges.push({
+              from: row.id,
+              to: row.organizationID,
+              type: "organization",
+              organizationName: row.organizationName,
+              formationDate: row.formationDate,
+              dissolutionDate: row.dissolutionDate,
+              organizationLOD: row.organizationLOD,
+            });
+          } else if (row.religionID) {
+            edges.push({
+              from: row.id,
+              to: row.religionID,
+              type: "religion",
+              religionDesc: row.religionDesc,
+              religionID: row.religionID,
+            });
+          } else if (row.relationshipID) {
+            edges.push({
+              from: row.person1ID,
+              to: row.person2ID,
+              type: "relationship",
+              relationship1to2ID: row.relationship1to2ID,
+              relationship2to1ID: row.relationship2to1ID,
+              uncertain: row.uncertain,
+              relationshipType: row.relationshipType,
+              relationshipDesc: row.relationshipDesc,
+            });
+          }
         });
-      } catch (error) {
-        console.error('Failed to run query:', error);
-        res.status(500).json({ error: 'Failed to run query' });
-      }
+
+        res.json({ nodes, edges });
+      })
+      .catch((error) => {
+        console.error("Failed to run query:", error);
+        res.status(500).json({ error: "Failed to run query" });
+      });
+  } catch (error) {
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+  }
+});
+
+router.get("/receivers", async (req, res) => {
+  console.log("GET request received");
+
+  //get all receivers from person2document
+
+  const query = `
+  SELECT
+  p.personID,
+  p.firstName,
+  p.middleName,
+  p.lastName,
+  p.suffix AS suffix,
+  p.biography
+FROM
+
+  person p
+  INNER JOIN person2document pd ON p.personID = pd.personID
+  INNER JOIN document d ON pd.docID = d.documentID
+  INNER JOIN person2document pd2 ON pd2.docID = d.documentID
+  INNER JOIN person r ON pd2.personID = r.personID
+  WHERE
+    p.personID != r.personID
+
+  `;
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    promisePool.query(query).then(([rows, fields]) => {
+      const receivers = rows.map((row) => {
+        return {
+          name: `${row.firstName} ${row.lastName}`,
+          image: "null",
+        };
+      });
+      res.json(receivers);
     });
+  } catch (error) {
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
+  }
+});
 
+router.get("/base_query", async (req, res) => {
+  console.log("GET request received");
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
 
+    // Create an array of queries to fetch data from each table
+    const queries = [
+      "SELECT * FROM person",
+      "SELECT * FROM keyword",
+      "SELECT * FROM organization",
+      "SELECT * FROM occupationtype",
+      "SELECT * FROM place",
+      "SELECT * FROM relationshiptype",
+      "SELECT * FROM religion",
+      "SELECT * FROM repository",
+      "SELECT * FROM role",
+    ];
+
+    // Execute all queries in parallel
+    const results = await Promise.all(
+      queries.map((query) => promisePool.query(query))
+    );
+
+    // Structure the data into a JSON object
+    const [
+      person,
+      keyword,
+      organizationtype,
+      occupation,
+      place,
+      relationshiptype,
+      religion,
+      repositorie,
+      role,
+    ] = results.map(([rows]) => rows);
+
+    const result = {
+      person,
+      keyword,
+      organizationtype,
+      occupation,
+      place,
+      relationshiptype,
+      religion,
+      repositorie,
+      role,
+    };
+
+    // Send the JSON response
+    res.json(result);
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 module.exports = router;
-
-
