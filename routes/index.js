@@ -657,8 +657,8 @@ function capitalizeName(name) {
 // The edges will be between the person and the document, organization, religion, or another person
 // Each node will store all the person's or organization's information
 // The query will use joins to get all the information needed
-router.get("/relations", async (req, res) => {
-  console.log("GET request received");
+router.post("/relations", async (req, res) => {
+  console.log(req.body);
 
   const query = `
         SELECT
@@ -1157,7 +1157,43 @@ FROM relationship rel;
           }
         });
 
-        res.json({ nodes, edges });
+        // Check if the request body is empty
+        const { person } = req.body;
+        if (!person || person.length === 0) {
+          // If the request body is empty, return all nodes and edges
+          console.log(edges);
+          return res.json({ nodes, edges });
+        }
+
+        // Filter edges based on the names passed in the body
+        const filteredEdges = edges.filter(
+          (edge) =>
+            person.includes(edge.senderFullName?.toLowerCase()) ||
+            person.includes(edge.receiverFullName?.toLowerCase())
+        );
+
+        // Collect all names from the filtered edges
+        const connectedNames = new Set();
+        filteredEdges.forEach((edge) => {
+          if (edge.senderFullName) {
+            edge.senderFullName
+              .split(", ")
+              .forEach((name) => connectedNames.add(name.toLowerCase()));
+          }
+          if (edge.receiverFullName) {
+            edge.receiverFullName
+              .split(", ")
+              .forEach((name) => connectedNames.add(name.toLowerCase()));
+          }
+        });
+
+        // Filter nodes based on the collected names
+        const filteredNodes = nodes.filter((node) =>
+          connectedNames.has(node.fullName.toLowerCase())
+        );
+
+        console.log(filteredEdges);
+        res.json({ nodes: filteredNodes, edges: filteredEdges });
       })
       .catch((error) => {
         console.error("Failed to run query:", error);
