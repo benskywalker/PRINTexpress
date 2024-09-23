@@ -63,26 +63,4 @@ SSHConnection.then(db => {
 
 
 // In db.js
-module.exports = SSHConnection; // SSHConnection is the promise that resolves to the db connection
-
-
-
-
-// const mysql = require('mysql2');
-// require('dotenv').config();
-
-// const db = mysql.createConnection({
-//     host: process.env.DB_HOST,
-//     user: process.env.DB_USER,
-//     password: process.env.DB_PASS,
-//     database: process.env.DB_NAME
-//   });
-  
-//   db.connect((err) => {
-//     if (err) throw err;
-//     console.log('Connected to the database');
-//   });
-
-
-// // In db.js
-// module.exports = db;
+module.exports = db;
