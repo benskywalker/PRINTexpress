@@ -1647,14 +1647,20 @@ router.post('/graph', async (req, res) => {
     // Helper function to generate a unique ID based on node type and ID
     const generateUniqueId = (type, id) => `${type}_${id}`;
 
+    // Create a map for person nodes to easily update their documents array
+    const personNodeMap = new Map();
+
     // Create nodes for people
     peopleArr.forEach((person) => {
       const uniqueId = generateUniqueId('person', person.personID);
-      nodes.push({
+      const personNode = {
         person: { ...person, fullName: `${person.firstName} ${person.lastName}` },
         nodeType: 'person',
         id: uniqueId,
-      });
+        documents: [],
+      };
+      nodes.push(personNode);
+      personNodeMap.set(uniqueId, personNode);
     });
 
     // Create nodes for documents
@@ -1691,6 +1697,12 @@ router.post('/graph', async (req, res) => {
           to: null,  // Initially null as we may not know receiver yet
           type: 'document',
         });
+
+        // Update the sender's documents array
+        const senderNode = personNodeMap.get(senderId);
+        if (senderNode && !senderNode.documents.some(doc => doc.documentID === document.documentID)) {
+          senderNode.documents.push(document);
+        }
       } else if (connection.roleID === 2) { // Receiver
         const receiverId = generateUniqueId('person', connection.personID);
         const edge = edges.find((edge) => edge.document.documentID === connection.docID && !edge.to);
@@ -1703,6 +1715,12 @@ router.post('/graph', async (req, res) => {
             to: receiverId,
             type: 'document',
           });
+        }
+
+        // Update the receiver's documents array
+        const receiverNode = personNodeMap.get(receiverId);
+        if (receiverNode && !receiverNode.documents.some(doc => doc.documentID === document.documentID)) {
+          receiverNode.documents.push(document);
         }
       }
     });
