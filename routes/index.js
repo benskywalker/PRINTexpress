@@ -272,59 +272,42 @@ router.get("/connections/:id", async (req, res) => {
     return;
   }
 });
+
 //get all documents sent and received by a person
 router.get("/documents", async (req, res) => {
   console.log("GET request received");
 
   const query = `
-    SELECT
-    p.personID AS senderID,
-    CONCAT(p.firstName, ' ', p.lastName) AS sender,
-    p.firstName AS senderFirstName,
-    p.middleName AS senderMiddleName,
-    p.lastName AS senderLastName,
-    p.suffix AS senderSuffix,
-    p.biography AS senderBiography,
-    r.personID AS receiverID,
-    CONCAT(r.firstName, ' ', r.lastName) AS receiver,  
-    r.firstName AS receiverFirstName,
-    r.middleName AS receiverMiddleName,
-    r.lastName AS receiverLastName,
-    r.suffix AS receiverSuffix,
-    r.biography AS receiverBiography,
-    pd.docID AS document,
-    d.importID,
-    d.collection,
-    d.abstract,
-    DATE_FORMAT(d.sortingDate, '%Y/%m/%d') AS date,
-    d.letterDate,
-    d.isJulian,
-    d.researchNotes,
-    d.customCitation,
-    d.docTypeID,
-    d.languageID AS documentLanguageID,
-    d.repositoryID,
-    d.dateAdded,
-    d.status,
-    d.whoCheckedOut,
-    d.volume,
-    d.page,
-    d.folder,
-    d.transcription,
-    d.translation,
-    d.virtual_doc,
-    pdf.pdfURL
+  SELECT
+        d.abstract,
+        d.sortingDate,
+        d.letterDate,
+        d.researchNotes,
+        d.customCitation,
+        d.documentID,
+        GROUP_CONCAT(DISTINCT pdf.pdfURL) AS pdfURL,
+		GROUP_CONCAT(DISTINCT CONCAT(p.firstName, " ", p.lastName)) AS senders,
+        GROUP_CONCAT(DISTINCT p.personID) as senderId,
+        GROUP_CONCAT(DISTINCT p.firstName) as senderFirstName,
+        GROUP_CONCAT(DISTINCT p.middleName) as senderMiddleName,
+        GROUP_CONCAT(DISTINCT p.lastName) as senderLastName,
+		GROUP_CONCAT(DISTINCT CONCAT(r.firstName, " ", r.lastName)) AS receivers,
+        GROUP_CONCAT(DISTINCT r.personID) as receiverId,
+        GROUP_CONCAT(DISTINCT r.firstName) as receiverFirstName,
+        GROUP_CONCAT(DISTINCT r.middleName) as receiverMiddleName,
+        GROUP_CONCAT(DISTINCT r.lastName) as receiverLastName,
+        l.languageDesc
   FROM
-    person p
-  LEFT JOIN person2document pd ON p.personID = pd.personID
-  LEFT JOIN document d ON pd.docID = d.documentID
-  LEFT JOIN person2document pd2 ON pd2.docID = pd.docID
-  LEFT JOIN person r ON pd2.personID = r.personID
+    document d
+  LEFT JOIN person2document pd ON pd.docID = d.documentID
+  LEFT JOIN person p on p.personID = pd.personID
+  LEFT JOIN person2document p2d ON p2d.docID = d.documentID
+  LEFT JOIN person r on r.personID = p2d.personID
   LEFT JOIN pdf_documents pdf ON d.documentID = pdf.documentID
-  WHERE
-    p.personID != r.personID
-  ORDER BY
-    pd.docID`;
+  LEFT JOIN language l ON d.languageID = l.languageID
+  WHERE pd.roleID = 1 AND p2d.roleID = 2
+  GROUP BY d.documentID
+  ORDER BY d.documentID`;
 
   try {
     const db = await dbPromise;
