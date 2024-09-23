@@ -1688,7 +1688,7 @@ router.post('/graph', async (req, res) => {
     documentConnectionsArr.forEach((connection) => {
       const documentId = generateUniqueId('document', connection.docID);
       const document = documentsArr.find((doc) => generateUniqueId('document', doc.documentID) === documentId);
-
+    
       if (connection.roleID === 1) { // Sender
         const senderId = generateUniqueId('person', connection.personID);
         edges.push({
@@ -1697,12 +1697,13 @@ router.post('/graph', async (req, res) => {
           to: null,  // Initially null as we may not know receiver yet
           type: 'document',
         });
-
+    
         // Update the sender's documents array
         const senderNode = personNodeMap.get(senderId);
-        if (senderNode && !senderNode.documents.some(doc => doc.documentID === document.documentID)) {
-          senderNode.documents.push(document);
+        if (senderNode && !senderNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+          senderNode.documents.push({ document, sender: senderNode.person, receiver: null });
         }
+    
       } else if (connection.roleID === 2) { // Receiver
         const receiverId = generateUniqueId('person', connection.personID);
         const edge = edges.find((edge) => edge.document.documentID === connection.docID && !edge.to);
@@ -1716,11 +1717,85 @@ router.post('/graph', async (req, res) => {
             type: 'document',
           });
         }
-
+    
         // Update the receiver's documents array
         const receiverNode = personNodeMap.get(receiverId);
-        if (receiverNode && !receiverNode.documents.some(doc => doc.documentID === document.documentID)) {
-          receiverNode.documents.push(document);
+        if (receiverNode && !receiverNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+          receiverNode.documents.push({ document, sender: null, receiver: receiverNode.person });
+        }
+    
+      } else if (connection.roleID === 3) { // Mentioned
+        const mentionedId = generateUniqueId('person', connection.personID);
+        edges.push({
+          document,
+          from: documentId,
+          to: mentionedId,
+          type: 'mentioned',
+        });
+    
+        // Update the mentioned person's documents array
+        const mentionedNode = personNodeMap.get(mentionedId);
+        if (mentionedNode && !mentionedNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+          mentionedNode.documents.push({ document, role: 'Mentioned' });
+        }
+    
+      } else if (connection.roleID === 4) { // Author
+        const authorId = generateUniqueId('person', connection.personID);
+        edges.push({
+          document,
+          from: authorId,
+          to: documentId,
+          type: 'author',
+        });
+    
+        // Update the author's documents array
+        const authorNode = personNodeMap.get(authorId);
+        if (authorNode && !authorNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+          authorNode.documents.push({ document, role: 'Author' });
+        }
+    
+      } else if (connection.roleID === 5) { // Waypoint
+        const waypointId = generateUniqueId('person', connection.personID);
+        edges.push({
+          document,
+          from: documentId,
+          to: waypointId,
+          type: 'waypoint',
+        });
+    
+        // Update the waypoint person's documents array
+        const waypointNode = personNodeMap.get(waypointId);
+        if (waypointNode && !waypointNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+          waypointNode.documents.push({ document, role: 'Waypoint' });
+        }
+      }
+    });
+    
+
+    // Update the documents array to include both sender and receiver
+    documentConnectionsArr.forEach((connection) => {
+      const documentId = generateUniqueId('document', connection.docID);
+      const document = documentsArr.find((doc) => generateUniqueId('document', doc.documentID) === documentId);
+
+      if (connection.roleID === 1) { // Sender
+        const senderId = generateUniqueId('person', connection.personID);
+        const senderNode = personNodeMap.get(senderId);
+        if (senderNode) {
+          senderNode.documents.forEach((doc) => {
+            if (doc.document.documentID === document.documentID) {
+              doc.sender = senderNode.person;
+            }
+          });
+        }
+      } else if (connection.roleID === 2) { // Receiver
+        const receiverId = generateUniqueId('person', connection.personID);
+        const receiverNode = personNodeMap.get(receiverId);
+        if (receiverNode) {
+          receiverNode.documents.forEach((doc) => {
+            if (doc.document.documentID === document.documentID) {
+              doc.receiver = receiverNode.person;
+            }
+          });
         }
       }
     });
