@@ -63,4 +63,4 @@ SSHConnection.then(db => {
 
 
 // In db.js
-module.exports = db;
+module.exports = SSHConnection; // SSHConnection is the promise that resolves to the db connection
