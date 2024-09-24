@@ -160,8 +160,8 @@ router.get("/persons", async (req, res) => {
     p.birthDate,
     p.deathDate,
     p.personStdName,
-    r.religionDesc,
-    l.languageDesc
+    r.religionDesc as religion,
+    l.languageDesc as language
   FROM
 	  person p
   LEFT JOIN person2religion pr ON pr.personID = p.personID
