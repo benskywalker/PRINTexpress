@@ -148,7 +148,25 @@ async function runQuery(query) {
 //get all persons
 router.get("/persons", async (req, res) => {
   console.log("GET request received");
-  const query = `SELECT * FROM person`;
+  const query = `SELECT
+	p.personID,
+    CONCAT(p.firstName, " ", p.lastName) as fullName,
+    p.firstName,
+    p.middleName,
+    p.lastName,
+    p.maidenName,
+    p.biography,
+    p.gender,
+    p.birthDate,
+    p.deathDate,
+    p.personStdName,
+    r.religionDesc as religion,
+    l.languageDesc as language
+  FROM
+	  person p
+  LEFT JOIN person2religion pr ON pr.personID = p.personID
+  LEFT JOIN religion r ON r.religionID = pr.religionID
+  LEFT JOIN language l on l.languageID = p.language_id`;
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
