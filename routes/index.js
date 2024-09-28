@@ -1689,29 +1689,46 @@ router.post('/graph', async (req, res) => {
       nodes.push({ organization, nodeType: 'organization', id: uniqueId });
     });
 
-    // Create edges for people to documents (with from/to fields and type)
     documentConnectionsArr.forEach((connection) => {
       const documentId = generateUniqueId('document', connection.docID);
       const document = documentsArr.find((doc) => generateUniqueId('document', doc.documentID) === documentId);
     
       if (connection.roleID === 1) { // Sender
         const senderId = generateUniqueId('person', connection.personID);
-        edges.push({
-          document,
-          from: senderId,
-          to: null,  // Initially null as we may not know receiver yet
-          type: 'document',
-        });
+    
+        // Find the existing edge for the document where 'from' is null (i.e., sender not assigned)
+        const edge = edges.find((edge) => edge.document.documentID === connection.docID && !edge.from);
+    
+        if (edge) {
+          edge.from = senderId;  // Update the 'from' field for sender
+        } else {
+          edges.push({
+            document,
+            from: senderId,
+            to: null,  // Initially null as we may not know receiver yet
+            type: 'document',
+          });
+        }
     
         // Update the sender's documents array
         const senderNode = personNodeMap.get(senderId);
         if (senderNode && !senderNode.documents.some(doc => doc.document.documentID === document.documentID)) {
-          senderNode.documents.push({ document, sender: senderNode.person, receiver: null });
+          //get the receiver of the document
+          const receiverID = documentConnectionsArr.find((connection) => connection.docID === document.documentID && connection.roleID === 2);
+          const receiver = peopleArr.find((person) => person.personID === receiverID?.personID);
+          if(receiver) {
+            console.log(receiver);
+          }
+          receiverFullName = `${receiver?.firstName} ${receiver?.lastName}`;
+          senderNode.documents.push({ document, sender: senderNode.person.fullName, receiver: receiverFullName });
         }
     
       } else if (connection.roleID === 2) { // Receiver
         const receiverId = generateUniqueId('person', connection.personID);
-        const edge = edges.find((edge) => edge.document.documentID === connection.docID && !edge.to);
+    
+        // Find the edge that has the documentID and either has no 'to' or no 'from' (because sender might not be known yet)
+        const edge = edges.find((edge) => edge.document.documentID === connection.docID && (!edge.to || !edge.from));
+    
         if (edge) {
           edge.to = receiverId;  // Update the 'to' field for receiver
         } else {
@@ -1726,7 +1743,11 @@ router.post('/graph', async (req, res) => {
         // Update the receiver's documents array
         const receiverNode = personNodeMap.get(receiverId);
         if (receiverNode && !receiverNode.documents.some(doc => doc.document.documentID === document.documentID)) {
-          receiverNode.documents.push({ document, sender: null, receiver: receiverNode.person });
+          //get the sender of the document
+          const senderID = documentConnectionsArr.find((connection) => connection.docID === document.documentID && connection.roleID === 1);
+          const sender = peopleArr.find((person) => person.personID === senderID?.receiverID); 
+          const senderFullName = `${sender?.firstName} ${sender?.lastName}`;
+          receiverNode.documents.push({ document, sender: senderFullName, receiver: receiverNode.person.fullName });
         }
     
       } else if (connection.roleID === 3) { // Mentioned
@@ -1749,7 +1770,7 @@ router.post('/graph', async (req, res) => {
         const authorId = generateUniqueId('person', connection.personID);
         edges.push({
           document,
-          // From author node to who ever receives the document
+          // From author node to whoever receives the document
           from: authorId,
           to: documentId,
           type: 'author',
@@ -1763,10 +1784,10 @@ router.post('/graph', async (req, res) => {
     
       } else if (connection.roleID === 5) { // Waypoint
         const waypointId = generateUniqueId('person', connection.personID); // Generate the waypoint person node ID
-      
-       //find the edge that has the documentID
-        const edge = edges.find((edge) => edge.document.documentID === connection.docID);
-
+    
+        // Find the edge that has the documentID and either no 'from' or 'to' (i.e., sender or receiver might not be known yet)
+        const edge = edges.find((edge) => edge.document.documentID === connection.docID && (!edge.from || !edge.to));
+    
         // If the edge exists, update the 'to' field with the waypoint person ID
         if (edge) {
           edge.to = waypointId;
@@ -1774,22 +1795,20 @@ router.post('/graph', async (req, res) => {
           // If the edge does not exist, create a new edge with the waypoint person ID
           edges.push({
             document,
-            from: null,  // Initially null as we may not know sender yet
+            from: null,  // Initially null as sender might not be known yet
             to: waypointId,
             type: 'document',
           });
         }
-
-        
-      
+    
         // Update the waypoint person's node to include the document in their documents array
         const waypointNode = personNodeMap.get(waypointId);
         if (waypointNode && !waypointNode.documents.some(doc => doc.document.documentID === document.documentID)) {
           waypointNode.documents.push({ document, sender: null, waypoint: waypointNode.person });
         }
       }
-      
     });
+    
     
 
    
