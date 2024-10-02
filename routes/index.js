@@ -1843,26 +1843,29 @@ ON
     
     // Process mentions
     mentionsArr.forEach((mention) => {
-      const mentionDocumentId = generateUniqueId('document', mention.documentID);
       const mentionPersonId = generateUniqueId('person', mention.personID);
+      const mentionReligionId = generateUniqueId('religion', mention.religionID);
+      const mentionOrganizationId = generateUniqueId('organization', mention.organizationID);
 
-      const documentNode = nodes.find((node) => node.id === mentionDocumentId);
+
       const personNode = nodes.find((node) => node.id === mentionPersonId);
+      const religionNode = nodes.find((node) => node.id === mentionReligionId);
+      const organizationNode = nodes.find((node) => node.id === mentionOrganizationId);
 
-      if (documentNode) {
-        documentNode.mentions.push({
-          mentionID: mention.mentionID,
-          mentiontypeID: mention.mentiontypeID,
-          comment: mention.mentionComment,
-        });
-      }
 
       if (personNode) {
         personNode.mentions.push({
-          mentionID: mention.mentionID,
-          mentiontypeID: mention.mentiontypeID,
-          comment: mention.mentionComment,
-          documentID: mention.documentID,
+          ...mention
+        });
+      }
+      if (religionNode) {
+        religionNode.mentions.push({
+          ...mention
+        });
+      }
+      if (organizationNode) {
+        organizationNode.mentions.push({
+          ...mention
         });
       }
     });
