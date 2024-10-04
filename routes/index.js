@@ -1656,6 +1656,27 @@ ON
     mn.mentionNodeID = m.mentionNodeID;
   `;
 
+  const relationshipsQuery = `
+  SELECT 
+    r.relationshipID,
+    r.person1ID,
+    r.person2ID,
+    rt1.relationshipDesc AS relationship1to2Desc,
+    rt2.relationshipDesc AS relationship2to1Desc,
+    r.dateStart,
+    r.dateEnd,
+    r.uncertain,
+    r.dateEndCause,
+    r.relationship1to2ID,
+    r.relationship2to1ID
+FROM 
+    relationship r
+ JOIN 
+    relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+ JOIN 
+    relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID;
+  `;
+
 
   try {
     const db = await dbPromise;
@@ -1669,6 +1690,7 @@ ON
     const [organizationResults] = await promisePool.query(organizationsQuery);
     const [organizationConnectionResults] = await promisePool.query(organizationConnectionsQuery);
     const [mentionResults] = await promisePool.query(mentionsQuery);
+    const [relationshipResults] = await promisePool.query(relationshipsQuery);
 
     const peopleArr = peopleResults;
     const documentsArr = documentResults;
@@ -1678,6 +1700,8 @@ ON
     const organizationsArr = organizationResults;
     const organizationConnectionsArr = organizationConnectionResults;
     const mentionsArr = mentionResults;
+    const relationshipsArr = relationshipResults;
+
     const edges = [];
     const nodes = [];
 
@@ -1840,35 +1864,85 @@ ON
         }
       }
     });
-    
-    // Process mentions
-    mentionsArr.forEach((mention) => {
-      const mentionPersonId = generateUniqueId('person', mention.personID);
-      const mentionReligionId = generateUniqueId('religion', mention.religionID);
-      const mentionOrganizationId = generateUniqueId('organization', mention.organizationID);
 
+// Process relationships
+relationshipsArr.forEach((relationship) => {
+  const person1Node = nodes.find((node) => node.person.personID === relationship.person1ID);
+  const person2Node = nodes.find((node) => node.person.personID === relationship.person2ID);
 
-      const personNode = nodes.find((node) => node.id === mentionPersonId);
-      const religionNode = nodes.find((node) => node.id === mentionReligionId);
-      const organizationNode = nodes.find((node) => node.id === mentionOrganizationId);
+  const person1Id = generateUniqueId('person', relationship.person1ID);
+  const person2Id = generateUniqueId('person', relationship.person2ID);
 
-
-      if (personNode) {
-        personNode.mentions.push({
-          ...mention
-        });
-      }
-      if (religionNode) {
-        religionNode.mentions.push({
-          ...mention
-        });
-      }
-      if (organizationNode) {
-        organizationNode.mentions.push({
-          ...mention
-        });
-      }
+  // Add relationship to person1 node
+  if (person1Node) {
+    person1Node.relations.push({
+      ...relationship,
+      person: {
+        personID: person2Node.person.personID,
+        fullName: person2Node.person.fullName,
+      },
     });
+  }
+
+  // Add relationship to person2 node
+  if (person2Node) {
+    person2Node.relations.push({
+      ...relationship,
+      person: {
+        personID: person1Node.person.personID,
+        fullName: person1Node.person.fullName,
+      },
+    });
+  }
+
+  // Create edge between person1 and person2
+  edges.push({
+    from: person1Id,
+    to: person2Id,
+    type: 'relationship',
+  });
+
+});
+
+    
+   // Process mentions
+mentionsArr.forEach((mention) => {
+  const mentionPersonId = generateUniqueId('person', mention.personID);
+  const mentionReligionId = generateUniqueId('religion', mention.religionID);
+  const mentionOrganizationId = generateUniqueId('organization', mention.organizationID);
+  const mentionDocumentId = generateUniqueId('document', mention.documentID);  // Mentioned document
+
+  const personNode = nodes.find((node) => node.id === mentionPersonId);
+  const religionNode = nodes.find((node) => node.id === mentionReligionId);
+  const organizationNode = nodes.find((node) => node.id === mentionOrganizationId);
+
+
+  
+
+// Add mention to person node if it exists
+if (personNode) {
+  personNode.mentions.push({
+    ...mention,
+  });
+}
+
+// Add mention to religion node if it exists
+if (religionNode) {
+  religionNode.mentions.push({
+    ...mention,
+  });
+  
+}
+
+// Add mention to organization node if it exists
+if (organizationNode) {
+  organizationNode.mentions.push({
+    ...mention,
+  });
+  
+}
+
+});
 
    
     // Create edges for people to religions (with from/to fields and type)
