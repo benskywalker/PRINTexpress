@@ -1982,6 +1982,132 @@ if (organizationNode) {
 });
 
 
+
+//get everything associated with a person just how the graph is storing an individual person
+//get by the personID
+router.get('/person/:personID', async (req, res) => {
+  const personID = req.params.personID;
+
+  const personQuery = `
+    SELECT *
+    FROM person
+    WHERE personID = ${personID};
+  `;
+
+  const documentQuery = `
+    SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date FROM document a, 
+    pdf_documents b, person2document c where a.documentID = b.documentID AND a.documentID = c.docID AND c.personID = ${personID};
+  `;
+
+  const religionQuery = `
+    SELECT *
+    FROM religion
+    WHERE religionID = (SELECT religionID FROM person2religion WHERE personID = ${personID});
+  `;
+
+  const organizationQuery = `
+    SELECT *
+    FROM organization
+    WHERE organizationID = (SELECT organizationID FROM person2organization WHERE personID = ${personID});
+  `;
+
+  const mentionQuery = `
+    SELECT 
+    mn.mentionNodeID,
+    mn.comment AS mentionNodeComment,
+    mn.dbNotes,
+    mn.mentionImportID,
+    mn.documentID AS mentionNodeDocumentID,
+    mn.mentiontypeID AS mentionNodeMentiontypeID,
+    m.mentionID,
+    m.documentID AS mentionDocumentID,
+    m.personID,
+    m.placeID,
+    m.keywordID,
+    m.organizationID,
+    m.religionID,
+    m.dateStart,
+    m.comment AS mentionComment,
+    m.person_uncertain,
+    m.place_uncertain,
+    m.keyword_uncertain,
+    m.organization_uncertain,
+    m.religion_uncertain,
+    m.dateStart_uncertain,
+    m.dateFinish,
+    m.dateFinish_uncertain,
+    m.mentiontypeID AS mentionMentiontypeID,
+    m.mentionNodeID AS mentionMentionNodeID
+FROM
+    mention_nodes mn
+JOIN
+    mentions m
+ON
+    mn.mentionNodeID = m.mentionNodeID
+WHERE
+    m.personID = ${personID};
+  `;
+
+  const relationshipQuery = `
+    SELECT 
+    r.relationshipID,
+    r.person1ID,
+    r.person2ID,
+    rt1.relationshipDesc AS relationship1to2Desc,
+    rt2.relationshipDesc AS relationship2to1Desc,
+    r.dateStart,
+    r.dateEnd,
+    r.uncertain,
+    r.dateEndCause,
+    r.relationship1to2ID,
+    r.relationship2to1ID
+FROM
+    relationship r
+JOIN
+    relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+JOIN
+    relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+WHERE
+    r.person1ID = ${personID} OR r.person2ID = ${personID};
+  `;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    const [personResults] = await promisePool.query(personQuery);
+    const [documentResults] = await promisePool.query(documentQuery);
+    const [religionResults] = await promisePool.query(religionQuery);
+    const [organizationResults] = await promisePool.query(organizationQuery);
+    const [mentionResults] = await promisePool.query(mentionQuery);
+    const [relationshipResults] = await promisePool.query(relationshipQuery);
+
+    const person = personResults[0];
+    const documents = documentResults;
+    const religion = religionResults[0];
+    const organization = organizationResults[0];
+    const mentions = mentionResults;
+    const relationships = relationshipResults;
+
+    const personNode = {
+      person,
+      documents,
+      religion,
+      organization,
+      mentions,
+      relationships,
+    };
+
+    res.json(personNode);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    res.status(500).send('Internal Server Error');
+  }
+}
+);
+
+
+
 const sshConfig = {
   host: process.env.DB_HOST,
   username: process.env.DB_SSH_USER,
@@ -2023,6 +2149,7 @@ router.post('/query', async (req, res) => {
   const query = req.body.query;
 
   try {
+    console.log('Running query:', query);
     res.json(query);
   } catch (error) {
     console.error('Error running query:', error);
@@ -2030,5 +2157,9 @@ router.post('/query', async (req, res) => {
   }
 }
 );
+
+
+
+
 
 module.exports = router;
