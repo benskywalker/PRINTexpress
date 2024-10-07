@@ -1,6 +1,10 @@
 // routes/index.js
 const express = require("express");
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const scpClient = require('scp2');
+require('dotenv').config();
 
 // Import the database connection
 const dbPromise = require("../db");
@@ -1978,7 +1982,42 @@ if (organizationNode) {
 });
 
 
+const sshConfig = {
+  host: process.env.DB_HOST,
+  username: process.env.DB_SSH_USER,
+  password: process.env.DB_SSH_PASSWORD,
+  port: 22
+};
 
+router.get('/pdf/:pdfName', (req, res) => {
+  const pdfName = req.params.pdfName;
+  const localPdfPath = path.join(__dirname, `../public/pdf/${pdfName}`);
+  const remotePdfPath = `/home/print/print_na/pdf_documents/${pdfName}`;
+
+  // Check if the PDF exists locally
+  if (fs.existsSync(localPdfPath)) {
+    return res.sendFile(localPdfPath);
+  }
+
+  // Download the PDF from the remote server
+  scpClient.scp(
+    {
+      host: sshConfig.host,
+      username: sshConfig.username,
+      password: sshConfig.password,  // Use privateKey for SSH key-based auth
+      path: remotePdfPath
+    },
+    localPdfPath,
+    function(err) {
+      if (err) {
+        return res.status(500).send('Error downloading the file from the remote server.');
+      }
+
+      // Send the file to the client after it has been downloaded
+      res.sendFile(localPdfPath);
+    }
+  );
+});
 
 
 
