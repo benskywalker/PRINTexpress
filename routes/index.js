@@ -1805,7 +1805,7 @@ FROM
         if (receiverNode && !receiverNode.documents.some(doc => doc.document.documentID === document.documentID)) {
           //get the sender of the document
           const senderID = documentConnectionsArr.find((connection) => connection.docID === document.documentID && connection.roleID === 1);
-          const sender = peopleArr.find((person) => person.personID === senderID?.receiverID); 
+          const sender = peopleArr.find((person) => person.personID === senderID?.personID);
           const senderFullName = `${sender?.firstName} ${sender?.lastName}`;
           receiverNode.documents.push({ document: {...document, sender: senderFullName, receiver: receiverNode.person.fullName} });
         }
