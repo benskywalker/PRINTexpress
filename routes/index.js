@@ -2019,8 +2019,11 @@ router.get('/pdf/:pdfName', (req, res) => {
   );
 });
 
-
-
-
+router.post('/query', async (req, res) => {
+  console.log('POST request received');
+  const { query } = req.body;
+  console.log(query);
+  res.json({ query });
+});
 
 module.exports = router;
