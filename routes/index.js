@@ -2146,11 +2146,91 @@ router.get('/pdf/:pdfName', (req, res) => {
 });
 
 router.post('/query', async (req, res) => {
+  const getBool = (bool) => {
+    switch(bool) {
+      case 'Equals':
+        return '=';
+      case 'Not Equals':
+        return '!=';
+      case 'Greater Than':
+        return '>';
+      case 'Less Than':
+        return '<';
+      case 'Greater Than or Equal To':
+        return '>=';
+      case 'Less Than or Equal To':
+        return '<=';
+      default:
+        return bool.toUpperCase();
+    }
+  };
+
+  const getField = (field) => {
+    switch(field) {
+      case 'First Name':
+        return 'firstName';
+      case 'Middle Name':
+        return 'middleName';
+      case 'Last Name':
+        return 'lastName';
+      case 'Person':
+        return 'personStdName';
+      case 'Place':
+        return 'placeStdName';
+      case 'Keyword':
+        return 'keyword';
+      case 'Organization':
+        return 'organizationStdName';
+      case 'Religion':
+        return 'religionDesc';
+      case 'Relationship':
+        return 'relationshipDesc';
+      case 'Repository':
+        return 'repositoryName';
+      default:
+        return field;
+    }
+  };
+
+  console.log('POST request received');
   const query = req.body.query;
+  let sql = '';
+  switch(req.body.table) {
+    case 'Person':
+      sql += 'SELECT * FROM person';
+      break;
+    case 'Document':
+      sql += 'SELECT * FROM document';
+      break;
+    case 'Place':
+      sql += 'SELECT * FROM place';
+      break;
+  }
+  console.log(query);
+  if(query[0].field !== undefined && query[0].bool !== undefined && query[0].value !== undefined) {
+    sql += ' WHERE ';
+    const bool = getBool(query[0].bool);
+    const field = getField(query[0].field);
+    sql += `${field} ${bool} \"${query[0].value}\"`;
+
+  for(var i = 1; i < query.length; i++) {
+    if(query[i].and)
+      sql += ' AND ';
+    else
+      sql += ' OR ';
+    const bool = getBool(query[i].bool);
+    const field = getField(query[i].field);
+    sql += `${field} ${bool} \"${query[i].value}\"`;
+  }
+}
 
   try {
-    console.log('Running query:', query);
-    res.json(query);
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    promisePool.query(sql).then(([rows, fields]) => {
+      res.json(rows);
+    });
   } catch (error) {
     console.error('Error running query:', error);
     res.status(500).send('Internal Server Error');
