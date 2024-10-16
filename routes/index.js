@@ -2307,6 +2307,33 @@ router.post('/query', async (req, res) => {
   const query = req.body.query;
   let sql = '';
   const personQuery = 
+  `SELECT * FROM (SELECT
+	  p.personID,
+    CONCAT(COALESCE(CONCAT(p.firstName, " "), ""), COALESCE(CONCAT(p.middleName, " "), "" ), COALESCE(p.lastName, "")) AS fullName,
+    p.firstName,
+    p.middleName,
+    p.lastName,
+    p.maidenName,
+    p.biography,
+    p.gender,
+    p.birthDate,
+    p.deathDate,
+    p.personStdName,
+    r.religionDesc,
+    l.languageDesc,
+    ot.occupationDesc,
+    o.organizationDesc
+  FROM
+	  person p
+  LEFT JOIN person2religion pr ON pr.personID = p.personID
+  LEFT JOIN religion r ON r.religionID = pr.religionID
+  LEFT JOIN language l ON l.languageID = p.language_id
+  LEFT JOIN person2occupation p2o ON p.personID = p2o.personID
+  LEFT JOIN occupationtype ot ON p2o.occupationID = ot.occupationtypeID
+  LEFT JOIN person2organization porg ON porg.personID = p.personID
+  LEFT JOIN organization o on o.organizationID = porg.organizationID
+  ORDER BY p.personID) AS sum`;
+  const documentQuery = 
   `SELECT * FROM (	
     SELECT
 		d.documentID,
@@ -2336,7 +2363,7 @@ router.post('/query', async (req, res) => {
       sql += personQuery;
       break;
     case 'Document':
-      sql += docQuery;
+      sql += documentQuery;
       break;
     case 'Place':
       sql += 'SELECT * FROM place';
