@@ -2254,86 +2254,148 @@ router.get("/personFullName/:id", async (req, res) => {
   }
 });
 
-router.post("/query", async (req, res) => {
+router.post('/query', async (req, res) => {
   const getBool = (bool) => {
-    switch (bool) {
-      case "Equals":
-        return "=";
-      case "Not Equals":
-        return "!=";
-      case "Greater Than":
-        return ">";
-      case "Less Than":
-        return "<";
-      case "Greater Than or Equal To":
-        return ">=";
-      case "Less Than or Equal To":
-        return "<=";
+    switch(bool) {
+      case 'Equals':
+        return '=';
+      case 'Not Equals':
+        return '!=';
+      case 'Greater Than':
+        return '>';
+      case 'Less Than':
+        return '<';
+      case 'Greater Than or Equal To':
+        return '>=';
+      case 'Less Than or Equal To':
+        return '<=';
       default:
         return bool.toUpperCase();
     }
   };
 
   const getField = (field) => {
-    switch (field) {
-      case "First Name":
-        return "firstName";
-      case "Middle Name":
-        return "middleName";
-      case "Last Name":
-        return "lastName";
-      case "Person":
-        return "personStdName";
-      case "Place":
-        return "placeStdName";
-      case "Keyword":
-        return "keyword";
-      case "Organization":
-        return "organizationStdName";
-      case "Religion":
-        return "religionDesc";
-      case "Relationship":
-        return "relationshipDesc";
-      case "Repository":
-        return "repositoryName";
+    switch(field) {
+      case 'First Name':
+        return 'firstName';
+      case 'Middle Name':
+        return 'middleName';
+      case 'Last Name':
+        return 'lastName';
+      case 'Person':
+        return 'personStdName';
+      case 'Place':
+        return 'placeStdName';
+      case 'Keyword':
+        return 'keyword';
+      case 'Organization':
+        return 'organizationDesc';
+      case 'Occupation':
+        return 'occupationDesc';
+      case 'Religion':
+        return 'religionDesc';
+      case 'Relationship':
+        return 'relationshipDesc';
+      case 'Repository':
+        return 'repositoryName';
       default:
         return field;
     }
   };
 
-  console.log("POST request received");
+  console.log('POST request received');
   const query = req.body.query;
-  let sql = "";
-  switch (req.body.table) {
-    case "Person":
-      sql += "SELECT * FROM person";
+  let sql = '';
+  const personQuery = 
+  `SELECT * FROM (SELECT
+	  p.personID,
+    CONCAT(COALESCE(CONCAT(p.firstName, " "), ""), COALESCE(CONCAT(p.middleName, " "), "" ), COALESCE(p.lastName, "")) AS fullName,
+    p.firstName,
+    p.middleName,
+    p.lastName,
+    p.maidenName,
+    p.biography,
+    p.gender,
+    p.birthDate,
+    p.deathDate,
+    p.personStdName,
+    r.religionDesc,
+    l.languageDesc,
+    ot.occupationDesc,
+    o.organizationDesc
+  FROM
+	  person p
+  LEFT JOIN person2religion pr ON pr.personID = p.personID
+  LEFT JOIN religion r ON r.religionID = pr.religionID
+  LEFT JOIN language l ON l.languageID = p.language_id
+  LEFT JOIN person2occupation p2o ON p.personID = p2o.personID
+  LEFT JOIN occupationtype ot ON p2o.occupationID = ot.occupationtypeID
+  LEFT JOIN person2organization porg ON porg.personID = p.personID
+  LEFT JOIN organization o on o.organizationID = porg.organizationID
+  ORDER BY p.personID) AS sum`;
+  const documentQuery = 
+  `SELECT * FROM (	
+    SELECT
+		d.documentID,
+		d.abstract,
+    d.sortingDate,
+    d.letterDate,
+    d.isJulian,
+    d.researchNotes,
+		GROUP_CONCAT(DISTINCT dt.typeDesc) AS docType,
+    GROUP_CONCAT(DISTINCT l.languageDesc) AS language,
+    GROUP_CONCAT(DISTINCT rep.repoDesc) as repository,
+    GROUP_CONCAT(DISTINCT CONCAT(COALESCE(CONCAT(author.firstName, " "), ""), COALESCE(CONCAT(author.middleName, " "), ""), COALESCE(author.lastName, ""))) AS authors,
+    GROUP_CONCAT(DISTINCT CONCAT(COALESCE(CONCAT(receiver.firstName, " "), ""), COALESCE(CONCAT(receiver.middleName, " "), ""), COALESCE(receiver.lastName, ""))) AS receivers,
+    GROUP_CONCAT(DISTINCT CONCAT_WS(' ', 
+        NULLIF(mention.firstName, ''), 
+        NULLIF(mention.middleName, ''), 
+        NULLIF(mention.lastName, '')
+    )) AS personMentions
+	FROM
+		document d
+	LEFT JOIN documenttype dt ON d.docTypeID = dt.docTypeID
+  LEFT JOIN language l ON d.languageID = l.languageID
+  LEFT JOIN repository rep ON rep.repoID = d.repositoryID
+  LEFT JOIN person2document p2da ON p2da.docID = d.documentID AND (p2da.roleID = 4 OR p2da.roleID = 1)
+  LEFT JOIN person author ON p2da.personID = author.personID
+	LEFT JOIN person2document p2dr ON p2dr.docID = d.documentID AND p2dr.roleID = 2
+  LEFT JOIN person receiver ON p2dr.personID = receiver.personID
+  LEFT JOIN mentions m ON m.documentID = d.documentID
+  LEFT JOIN person mention ON m.personID = mention.personID
+  LEFT JOIN place mplace ON m.placeID = mplace.placeID
+  LEFT JOIN religion mrel ON m.religionID = mrel.religionID
+  GROUP BY d.documentID
+) AS doc`;
+  switch(req.body.table) {
+    case 'Person':
+      sql += personQuery;
       break;
-    case "Document":
-      sql += "SELECT * FROM document";
+    case 'Document':
+      sql += 'SELECT * FROM document';
       break;
-    case "Place":
-      sql += "SELECT * FROM place";
+    case 'Place':
+      sql += 'SELECT * FROM place';
       break;
+    default:
+      return;
   }
-  console.log(query);
-  if (
-    query[0].field !== undefined &&
-    query[0].bool !== undefined &&
-    query[0].value !== undefined
-  ) {
-    sql += " WHERE ";
+  if(query.length != 0 && query[0].field !== undefined && query[0].bool !== undefined && query[0].value !== undefined) {
+    sql += ' WHERE ';
     const bool = getBool(query[0].bool);
     const field = getField(query[0].field);
     sql += `${field} ${bool} \"${query[0].value}\"`;
 
-    for (var i = 1; i < query.length; i++) {
-      if (query[i].and) sql += " AND ";
-      else sql += " OR ";
-      const bool = getBool(query[i].bool);
-      const field = getField(query[i].field);
-      sql += `${field} ${bool} \"${query[i].value}\"`;
-    }
+  for(var i = 1; i < query.length; i++) {
+    if(query[i].and)
+      sql += ' AND ';
+    else
+      sql += ' OR ';
+    const bool = getBool(query[i].bool);
+    const field = getField(query[i].field);
+    sql += `${field} ${bool} \"${query[i].value}\"`;
   }
+}
 
   try {
     const db = await dbPromise;
@@ -2343,9 +2405,10 @@ router.post("/query", async (req, res) => {
       res.json(rows);
     });
   } catch (error) {
-    console.error("Error running query:", error);
-    res.status(500).send("Internal Server Error");
+    console.error('Error running query:', error);
+    res.status(500).send('Internal Server Error');
   }
-});
+}
+);
 
 module.exports = router;
