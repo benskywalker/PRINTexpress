@@ -1,10 +1,11 @@
 // routes/index.js
 const express = require("express");
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
-const scpClient = require('scp2');
-require('dotenv').config();
+const fs = require("fs");
+const path = require("path");
+const scpClient = require("scp2");
+const knex = require("knex")(require("../knexfile"));
+require("dotenv").config();
 
 // Import the database connection
 const dbPromise = require("../db");
@@ -1320,11 +1321,7 @@ router.get("/base_query", async (req, res) => {
   }
 });
 
-
-
-
 router.get("/documents", async (req, res) => {
-
   const people = `
   select
   *
@@ -1358,8 +1355,8 @@ router.get("/documents", async (req, res) => {
     const documentsArr = documentResults[0];
     const connectionsArr = connectionResults[0];
 
-    const edges = []
-    const nodes = []
+    const edges = [];
+    const nodes = [];
 
     //an edge consists of two rows from the connections table
     //each row represents a connection between a person and a document
@@ -1373,63 +1370,56 @@ router.get("/documents", async (req, res) => {
     //each edge has a unique documentID
     connectionsArr.forEach((connection) => {
       const documentID = connection.docID;
-      const document = documentsArr.find((doc) => doc.documentID === documentID);
-      
-      if(connection.roleID === 1) {
-        const sender = peopleArr.find((person) => person.personID === connection.personID);
+      const document = documentsArr.find(
+        (doc) => doc.documentID === documentID
+      );
+
+      if (connection.roleID === 1) {
+        const sender = peopleArr.find(
+          (person) => person.personID === connection.personID
+        );
         nodes.push(sender);
-      }
-      else if(connection.roleID === 2) {
-        const receiver = peopleArr.find((person) => person.personID === connection.personID);
+      } else if (connection.roleID === 2) {
+        const receiver = peopleArr.find(
+          (person) => person.personID === connection.personID
+        );
         nodes.push(receiver);
       }
       //check to see if the document exists in the edges array
       //if it does not exist, add it to the edges array
       //else add the sender/reciever to the edges array
       //edge object consists of the sender and receiver and the documentID
-      const edge = edges.find((edge) => edge.document.documentID === documentID);
+      const edge = edges.find(
+        (edge) => edge.document.documentID === documentID
+      );
 
-      if(!edge) {
+      if (!edge) {
         edges.push({
           document: document,
           sender: connection.roleID === 1 ? connection.personID : null,
-          receiver: connection.roleID === 2 ? connection.personID : null
+          receiver: connection.roleID === 2 ? connection.personID : null,
         });
-      }
-      else {
-        if(connection.roleID === 1) {
+      } else {
+        if (connection.roleID === 1) {
           edge.sender = connection.personID;
-        }
-        else if(connection.roleID === 2) {
+        } else if (connection.roleID === 2) {
           edge.receiver = connection.personID;
         }
       }
-      
-
-
-
     });
 
     //filter out edges that do not have a sender or receiver
 
     const filteredEdges = edges.filter((edge) => edge.sender && edge.receiver);
 
-    res.json({filteredEdges, nodes});
-
-
-
-   
-
-  }
-  catch(error) {
+    res.json({ filteredEdges, nodes });
+  } catch (error) {
     console.error("Error fetching data:", error);
     res.status(500).send("Internal Server Error");
   }
-}
-);
+});
 
-
-router.get('/religion', async (req, res) => {
+router.get("/religion", async (req, res) => {
   const people = `
   select
   *
@@ -1463,52 +1453,54 @@ router.get('/religion', async (req, res) => {
     const religionsArr = religionResults[0];
     const connectionsArr = connectionResults[0];
 
-    const edges = []
-    const nodes = []
+    const edges = [];
+    const nodes = [];
 
     connectionsArr.forEach((connection) => {
       const religionID = connection.religionID;
-      const religion = religionsArr.find((religion) => religion.religionID === religionID);
-      
-      const person = peopleArr.find((person) => person.personID === connection.personID);
+      const religion = religionsArr.find(
+        (religion) => religion.religionID === religionID
+      );
+
+      const person = peopleArr.find(
+        (person) => person.personID === connection.personID
+      );
       nodes.push(person);
 
-      const edge = edges.find((edgeI) =>{
-        edgeI.religion.religionID === religionID
+      const edge = edges.find((edgeI) => {
+        edgeI.religion.religionID === religionID;
       });
 
-        edges.push({
-          religion: religion,
-          person: connection.personID
-        });
-      
-
+      edges.push({
+        religion: religion,
+        person: connection.personID,
+      });
     });
 
     //if the person does not have a religion, remove the person from the nodes array
     const filteredNodes = nodes.filter((node) => {
-      if(connectionsArr.find((connection) => connection.personID === node.personID)) {
+      if (
+        connectionsArr.find(
+          (connection) => connection.personID === node.personID
+        )
+      ) {
         return node;
       }
     });
 
     //add the religion to the nodes array
     religionsArr.forEach((religion) => {
-        filteredNodes.push(religion);
-    })
+      filteredNodes.push(religion);
+    });
 
-    res.json({edges, filteredNodes});
-
-  }
-
-  catch(error) {
+    res.json({ edges, filteredNodes });
+  } catch (error) {
     console.error("Error fetching data:", error);
     res.status(500).send("Internal Server Error");
   }
-}
-);
+});
 
-router.get('/organization', async (req, res) => {
+router.get("/organization", async (req, res) => {
   const people = `
   select
   *
@@ -1542,54 +1534,54 @@ router.get('/organization', async (req, res) => {
     const organizationsArr = organizationResults[0];
     const connectionsArr = connectionResults[0];
 
-    const edges = []
-    const nodes = []
+    const edges = [];
+    const nodes = [];
 
     connectionsArr.forEach((connection) => {
       const organizationID = connection.organizationID;
-      const organization = organizationsArr.find((organization) => organization.organizationID === organizationID);
-      
-      const person = peopleArr.find((person) => person.personID === connection.personID);
+      const organization = organizationsArr.find(
+        (organization) => organization.organizationID === organizationID
+      );
+
+      const person = peopleArr.find(
+        (person) => person.personID === connection.personID
+      );
       nodes.push(person);
 
-      const edge = edges.find((edgeI) =>{
-        edgeI.organization.organizationID === organizationID
+      const edge = edges.find((edgeI) => {
+        edgeI.organization.organizationID === organizationID;
       });
 
-        edges.push({
-          organization: organization,
-          person: connection.personID
-        });
-      
-
+      edges.push({
+        organization: organization,
+        person: connection.personID,
+      });
     });
 
-    
     //if the person does not exist in the connections array, remove the person from the nodes array
     const filteredNodes = nodes.filter((node) => {
-      if(connectionsArr.find((connection) => connection.personID === node.personID)) {
+      if (
+        connectionsArr.find(
+          (connection) => connection.personID === node.personID
+        )
+      ) {
         return node;
       }
     });
 
     //add the organization to the nodes array
     organizationsArr.forEach((organization) => {
-        filteredNodes.push(organization);
-    })
+      filteredNodes.push(organization);
+    });
 
-    res.json({edges, filteredNodes});
-
-  }
-
-  catch(error) {
+    res.json({ edges, filteredNodes });
+  } catch (error) {
     console.error("Error fetching data:", error);
     res.status(500).send("Internal Server Error");
   }
-}
-);
+});
 
-
-router.post('/graph', async (req, res) => {
+router.post("/graph", async (req, res) => {
   const peopleQuery = `
     SELECT *
     FROM person;
@@ -1598,7 +1590,7 @@ router.post('/graph', async (req, res) => {
   const documentsQuery = `
       SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date FROM document a, 
   pdf_documents b where a.documentID = b.documentID;
-    `
+    `;
 
   const documentConnectionsQuery = `
     SELECT *
@@ -1741,11 +1733,17 @@ left JOIN
 
     const [peopleResults] = await promisePool.query(peopleQuery);
     const [documentResults] = await promisePool.query(documentsQuery);
-    const [documentConnectionResults] = await promisePool.query(documentConnectionsQuery);
+    const [documentConnectionResults] = await promisePool.query(
+      documentConnectionsQuery
+    );
     const [religionResults] = await promisePool.query(religionsQuery);
-    const [religionConnectionResults] = await promisePool.query(religionConnectionsQuery);
+    const [religionConnectionResults] = await promisePool.query(
+      religionConnectionsQuery
+    );
     const [organizationResults] = await promisePool.query(organizationsQuery);
-    const [organizationConnectionResults] = await promisePool.query(organizationConnectionsQuery);
+    const [organizationConnectionResults] = await promisePool.query(
+      organizationConnectionsQuery
+    );
     const [mentionResults] = await promisePool.query(mentionsQuery);
     const [relationshipResults] = await promisePool.query(relationshipsQuery);
 
@@ -1770,10 +1768,13 @@ left JOIN
 
     // Create nodes for people
     peopleArr.forEach((person) => {
-      const uniqueId = generateUniqueId('person', person.personID);
+      const uniqueId = generateUniqueId("person", person.personID);
       const personNode = {
-        person: { ...person, fullName: `${person.firstName} ${person.lastName}` },
-        nodeType: 'person',
+        person: {
+          ...person,
+          fullName: `${person.firstName} ${person.lastName}`,
+        },
+        nodeType: "person",
         id: uniqueId,
         documents: [],
         relations: [],
@@ -1785,122 +1786,184 @@ left JOIN
 
     // Create nodes for documents
     documentsArr.forEach((document) => {
-      const uniqueId = generateUniqueId('document', document.documentID);
-      nodes.push({ document, nodeType: 'document', id: uniqueId });
+      const uniqueId = generateUniqueId("document", document.documentID);
+      nodes.push({ document, nodeType: "document", id: uniqueId });
     });
 
     // Ensure each religion node is unique by checking religionID before adding
     religionsArr.forEach((religion) => {
-      const uniqueId = generateUniqueId('religion', religion.religionID);
-      const existingNode = nodes.find((node) => node.id === uniqueId && node.nodeType === 'religion');
+      const uniqueId = generateUniqueId("religion", religion.religionID);
+      const existingNode = nodes.find(
+        (node) => node.id === uniqueId && node.nodeType === "religion"
+      );
       if (!existingNode) {
-        nodes.push({ religion, nodeType: 'religion', id: uniqueId });
+        nodes.push({ religion, nodeType: "religion", id: uniqueId });
       }
     });
 
     // Create nodes for organizations
     organizationsArr.forEach((organization) => {
-      const uniqueId = generateUniqueId('organization', organization.organizationID);
-      nodes.push({ organization, nodeType: 'organization', id: uniqueId });
+      const uniqueId = generateUniqueId(
+        "organization",
+        organization.organizationID
+      );
+      nodes.push({ organization, nodeType: "organization", id: uniqueId });
     });
 
     documentConnectionsArr.forEach((connection) => {
-      const documentId = generateUniqueId('document', connection.docID);
-      const document = documentsArr.find((doc) => generateUniqueId('document', doc.documentID) === documentId);
-    
-      if (connection.roleID === 1) { // Sender
-        const senderId = generateUniqueId('person', connection.personID);
-    
+      const documentId = generateUniqueId("document", connection.docID);
+      const document = documentsArr.find(
+        (doc) => generateUniqueId("document", doc.documentID) === documentId
+      );
+
+      if (connection.roleID === 1) {
+        // Sender
+        const senderId = generateUniqueId("person", connection.personID);
+
         // Find the existing edge for the document where 'from' is null (i.e., sender not assigned)
-        const edge = edges.find((edge) => edge.document.documentID === connection.docID && !edge.from);
-    
+        const edge = edges.find(
+          (edge) => edge.document.documentID === connection.docID && !edge.from
+        );
+
         if (edge) {
-          edge.from = senderId;  // Update the 'from' field for sender
+          edge.from = senderId; // Update the 'from' field for sender
         } else {
           edges.push({
             document,
             from: senderId,
-            to: null,  // Initially null as we may not know receiver yet
-            type: 'document',
+            to: null, // Initially null as we may not know receiver yet
+            type: "document",
           });
         }
-    
+
         // Update the sender's documents array
         const senderNode = personNodeMap.get(senderId);
-        if (senderNode && !senderNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+        if (
+          senderNode &&
+          !senderNode.documents.some(
+            (doc) => doc.document.documentID === document.documentID
+          )
+        ) {
           //get the receiver of the document
-          const receiverID = documentConnectionsArr.find((connection) => connection.docID === document.documentID && connection.roleID === 2);
-          const receiver = peopleArr.find((person) => person.personID === receiverID?.personID);
+          const receiverID = documentConnectionsArr.find(
+            (connection) =>
+              connection.docID === document.documentID &&
+              connection.roleID === 2
+          );
+          const receiver = peopleArr.find(
+            (person) => person.personID === receiverID?.personID
+          );
 
           receiverFullName = `${receiver?.firstName} ${receiver?.lastName}`;
-          senderNode.documents.push({ document: {...document, sender: senderNode.person.fullName, receiver: receiverFullName} });
+          senderNode.documents.push({
+            document: {
+              ...document,
+              sender: senderNode.person.fullName,
+              receiver: receiverFullName,
+            },
+          });
         }
-    
-      } else if (connection.roleID === 2) { // Receiver
-        const receiverId = generateUniqueId('person', connection.personID);
-    
+      } else if (connection.roleID === 2) {
+        // Receiver
+        const receiverId = generateUniqueId("person", connection.personID);
+
         // Find the edge that has the documentID and either has no 'to' or no 'from' (because sender might not be known yet)
-        const edge = edges.find((edge) => edge.document.documentID === connection.docID && (!edge.to || !edge.from));
-    
+        const edge = edges.find(
+          (edge) =>
+            edge.document.documentID === connection.docID &&
+            (!edge.to || !edge.from)
+        );
+
         if (edge) {
-          edge.to = receiverId;  // Update the 'to' field for receiver
+          edge.to = receiverId; // Update the 'to' field for receiver
         } else {
           edges.push({
             document,
-            from: null,  // Initially null as we may not know sender yet
+            from: null, // Initially null as we may not know sender yet
             to: receiverId,
-            type: 'document',
+            type: "document",
           });
         }
-    
+
         // Update the receiver's documents array
         const receiverNode = personNodeMap.get(receiverId);
-        if (receiverNode && !receiverNode.documents.some(doc => doc.document.documentID === document.documentID)) {
+        if (
+          receiverNode &&
+          !receiverNode.documents.some(
+            (doc) => doc.document.documentID === document.documentID
+          )
+        ) {
           //get the sender of the document
-          const senderID = documentConnectionsArr.find((connection) => connection.docID === document.documentID && connection.roleID === 1);
-          const sender = peopleArr.find((person) => person.personID === senderID?.personID);
+          const senderID = documentConnectionsArr.find(
+            (connection) =>
+              connection.docID === document.documentID &&
+              connection.roleID === 1
+          );
+          const sender = peopleArr.find(
+            (person) => person.personID === senderID?.personID
+          );
           const senderFullName = `${sender?.firstName} ${sender?.lastName}`;
-          receiverNode.documents.push({ document: {...document, sender: senderFullName, receiver: receiverNode.person.fullName} });
+          receiverNode.documents.push({
+            document: {
+              ...document,
+              sender: senderFullName,
+              receiver: receiverNode.person.fullName,
+            },
+          });
         }
-    
-      } else if (connection.roleID === 3) { // Mentioned
-        const mentionedId = generateUniqueId('person', connection.personID);
+      } else if (connection.roleID === 3) {
+        // Mentioned
+        const mentionedId = generateUniqueId("person", connection.personID);
         edges.push({
           document,
           // From author node to mentioned person node
           from: documentId,
           to: mentionedId,
-          type: 'mentioned',
+          type: "mentioned",
         });
-    
+
         // Update the mentioned person's documents array
         const mentionedNode = personNodeMap.get(mentionedId);
-        if (mentionedNode && !mentionedNode.documents.some(doc => doc.document.documentID === document.documentID)) {
-          mentionedNode.documents.push({ document, role: 'Mentioned' });
+        if (
+          mentionedNode &&
+          !mentionedNode.documents.some(
+            (doc) => doc.document.documentID === document.documentID
+          )
+        ) {
+          mentionedNode.documents.push({ document, role: "Mentioned" });
         }
-    
-      } else if (connection.roleID === 4) { // Author
-        const authorId = generateUniqueId('person', connection.personID);
+      } else if (connection.roleID === 4) {
+        // Author
+        const authorId = generateUniqueId("person", connection.personID);
         edges.push({
           document,
           // From author node to whoever receives the document
           from: authorId,
           to: documentId,
-          type: 'author',
+          type: "author",
         });
-    
+
         // Update the author's documents array
         const authorNode = personNodeMap.get(authorId);
-        if (authorNode && !authorNode.documents.some(doc => doc.document.documentID === document.documentID)) {
-          authorNode.documents.push({ document, role: 'Author' });
+        if (
+          authorNode &&
+          !authorNode.documents.some(
+            (doc) => doc.document.documentID === document.documentID
+          )
+        ) {
+          authorNode.documents.push({ document, role: "Author" });
         }
-    
-      } else if (connection.roleID === 5) { // Waypoint
-        const waypointId = generateUniqueId('person', connection.personID); // Generate the waypoint person node ID
-    
+      } else if (connection.roleID === 5) {
+        // Waypoint
+        const waypointId = generateUniqueId("person", connection.personID); // Generate the waypoint person node ID
+
         // Find the edge that has the documentID and either no 'from' or 'to' (i.e., sender or receiver might not be known yet)
-        const edge = edges.find((edge) => edge.document.documentID === connection.docID && (!edge.from || !edge.to));
-    
+        const edge = edges.find(
+          (edge) =>
+            edge.document.documentID === connection.docID &&
+            (!edge.from || !edge.to)
+        );
+
         // If the edge exists, update the 'to' field with the waypoint person ID
         if (edge) {
           edge.to = waypointId;
@@ -1908,16 +1971,25 @@ left JOIN
           // If the edge does not exist, create a new edge with the waypoint person ID
           edges.push({
             document,
-            from: null,  // Initially null as sender might not be known yet
+            from: null, // Initially null as sender might not be known yet
             to: waypointId,
-            type: 'document',
+            type: "document",
           });
         }
-    
+
         // Update the waypoint person's node to include the document in their documents array
         const waypointNode = personNodeMap.get(waypointId);
-        if (waypointNode && !waypointNode.documents.some(doc => doc.document.documentID === document.documentID)) {
-          waypointNode.documents.push({ document, sender: null, waypoint: waypointNode.person });
+        if (
+          waypointNode &&
+          !waypointNode.documents.some(
+            (doc) => doc.document.documentID === document.documentID
+          )
+        ) {
+          waypointNode.documents.push({
+            document,
+            sender: null,
+            waypoint: waypointNode.person,
+          });
         }
       }
     });
@@ -1941,76 +2013,79 @@ mentionsArr.forEach((mention) => {
   const mentionOrganizationId = generateUniqueId('organization', mention.organizationID);
   const mentionDocumentId = generateUniqueId('document', mention.documentID);  // Mentioned document
 
-  const personNode = nodes.find((node) => node.id === mentionPersonId);
-  const religionNode = nodes.find((node) => node.id === mentionReligionId);
-  const organizationNode = nodes.find((node) => node.id === mentionOrganizationId);
+      const personNode = nodes.find((node) => node.id === mentionPersonId);
+      const religionNode = nodes.find((node) => node.id === mentionReligionId);
+      const organizationNode = nodes.find(
+        (node) => node.id === mentionOrganizationId
+      );
 
+      // Add mention to person node if it exists
+      if (personNode) {
+        personNode.mentions.push({
+          ...mention,
+        });
+      }
 
-  
+      // Add mention to religion node if it exists
+      if (religionNode) {
+        religionNode.mentions.push({
+          ...mention,
+        });
+      }
 
-// Add mention to person node if it exists
-if (personNode) {
-  personNode.mentions.push({
-    ...mention,
-  });
-}
+      // Add mention to organization node if it exists
+      if (organizationNode) {
+        organizationNode.mentions.push({
+          ...mention,
+        });
+      }
+    });
 
-// Add mention to religion node if it exists
-if (religionNode) {
-  religionNode.mentions.push({
-    ...mention,
-  });
-  
-}
-
-// Add mention to organization node if it exists
-if (organizationNode) {
-  organizationNode.mentions.push({
-    ...mention,
-  });
-  
-}
-
-});
-
-   
     // Create edges for people to religions (with from/to fields and type)
     religionConnectionsArr.forEach((connection) => {
-      const religionId = generateUniqueId('religion', connection.religionID);
-      const personId = generateUniqueId('person', connection.personID);
+      const religionId = generateUniqueId("religion", connection.religionID);
+      const personId = generateUniqueId("person", connection.personID);
       edges.push({
-        from: personId,  // From person node
-        to: religionId,  // To religion node
-        type: 'religion',
+        from: personId, // From person node
+        to: religionId, // To religion node
+        type: "religion",
       });
     });
 
     // Create edges for people to organizations (with from/to fields and type)
     organizationConnectionsArr.forEach((connection) => {
-      const organizationId = generateUniqueId('organization', connection.organizationID);
-      const personId = generateUniqueId('person', connection.personID);
+      const organizationId = generateUniqueId(
+        "organization",
+        connection.organizationID
+      );
+      const personId = generateUniqueId("person", connection.personID);
       edges.push({
-        from: personId,  // From person node
-        to: organizationId,  // To organization node
-        type: 'organization',
+        from: personId, // From person node
+        to: organizationId, // To organization node
+        type: "organization",
       });
     });
 
     // Filter out edges where 'from' or 'to' is null
-    const filteredEdges = edges.filter((edge) => edge.from !== null && edge.to !== null);
+    const filteredEdges = edges.filter(
+      (edge) => edge.from !== null && edge.to !== null
+    );
 
-    res.json({ edges: filteredEdges, nodes, elength: filteredEdges.length, nlength: nodes.length });
+    res.json({
+      edges: filteredEdges,
+      nodes,
+      elength: filteredEdges.length,
+      nlength: nodes.length,
+    });
   } catch (error) {
-    console.error('Error fetching data:', error);
-    res.status(500).send('Internal Server Error');
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-
-
 //get everything associated with a person just how the graph is storing an individual person
 //get by the personID
-router.get('/person/:personID', async (req, res) => {
+router.get("/person/:personID", async (req, res) => {
   const personID = req.params.personID;
 
   const personQuery = `
@@ -2125,22 +2200,19 @@ WHERE
 
     res.json(personNode);
   } catch (error) {
-    console.error('Error fetching data:', error);
-    res.status(500).send('Internal Server Error');
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
   }
-}
-);
-
-
+});
 
 const sshConfig = {
   host: process.env.DB_HOST,
   username: process.env.DB_SSH_USER,
   password: process.env.DB_SSH_PASSWORD,
-  port: 22
+  port: 22,
 };
 
-router.get('/pdf/:pdfName', (req, res) => {
+router.get("/pdf/:pdfName", (req, res) => {
   const pdfName = req.params.pdfName;
   const localPdfPath = path.join(__dirname, `../public/pdf/${pdfName}`);
   const remotePdfPath = `/home/print/print_na/pdf_documents/${pdfName}`;
@@ -2155,13 +2227,15 @@ router.get('/pdf/:pdfName', (req, res) => {
     {
       host: sshConfig.host,
       username: sshConfig.username,
-      password: sshConfig.password,  // Use privateKey for SSH key-based auth
-      path: remotePdfPath
+      password: sshConfig.password, // Use privateKey for SSH key-based auth
+      path: remotePdfPath,
     },
     localPdfPath,
-    function(err) {
+    function (err) {
       if (err) {
-        return res.status(500).send('Error downloading the file from the remote server.');
+        return res
+          .status(500)
+          .send("Error downloading the file from the remote server.");
       }
 
       // Send the file to the client after it has been downloaded
@@ -2170,21 +2244,231 @@ router.get('/pdf/:pdfName', (req, res) => {
   );
 });
 
-router.post('/query', async (req, res) => {
-  const query = req.body.query;
+router.get("/personFullName/:id", async (req, res) => {
+  const personId = req.params.id;
+
+  const personQuery = `
+    SELECT CONCAT(firstName, ' ', lastName) AS fullName
+    FROM person
+    WHERE personID = ${personId};
+  `;
 
   try {
-    console.log('Running query:', query);
-    res.json(query);
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    const [personResults] = await promisePool.query(personQuery);
+
+    if (personResults.length > 0) {
+      res.json(personResults[0]);
+    } else {
+      res.status(404).send("Person not found");
+    }
   } catch (error) {
-    console.error('Error running query:', error);
-    res.status(500).send('Internal Server Error');
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
   }
-}
-);
+});
 
+router.post("/query", async (req, res) => {
+  const getBool = (bool) => {
+    switch (bool) {
+      case "Equals":
+        return "=";
+      case "Not Equals":
+        return "!=";
+      case "Greater Than":
+        return ">";
+      case "Less Than":
+        return "<";
+      case "Greater Than or Equal To":
+        return ">=";
+      case "Less Than or Equal To":
+        return "<=";
+      default:
+        return bool.toUpperCase();
+    }
+  };
 
+  const getField = (field) => {
+    switch (field) {
+      case "First Name":
+        return "firstName";
+      case "Middle Name":
+        return "middleName";
+      case "Last Name":
+        return "lastName";
+      case "Person":
+        return "personStdName";
+      case "Place":
+        return "placeStdName";
+      case "Keyword":
+        return "keyword";
+      case "Organization":
+        return "organizationDesc";
+      case "Occupation":
+        return "occupationDesc";
+      case "Religion":
+        return "religionDesc";
+      case "Relationship":
+        return "relationshipDesc";
+      case "Repository":
+        return "repositoryName";
+      default:
+        return field;
+    }
+  };
 
+  console.log("POST request received");
+  const query = req.body.query;
+  let sql = "";
+  const personQuery = `SELECT * FROM (SELECT
+	  p.personID,
+    CONCAT(COALESCE(CONCAT(p.firstName, " "), ""), COALESCE(CONCAT(p.middleName, " "), "" ), COALESCE(p.lastName, "")) AS fullName,
+    p.firstName,
+    p.middleName,
+    p.lastName,
+    p.maidenName,
+    p.biography,
+    p.gender,
+    p.birthDate,
+    p.deathDate,
+    p.personStdName,
+    r.religionDesc,
+    l.languageDesc,
+    ot.occupationDesc,
+    o.organizationDesc
+  FROM
+	  person p
+  LEFT JOIN person2religion pr ON pr.personID = p.personID
+  LEFT JOIN religion r ON r.religionID = pr.religionID
+  LEFT JOIN language l ON l.languageID = p.language_id
+  LEFT JOIN person2occupation p2o ON p.personID = p2o.personID
+  LEFT JOIN occupationtype ot ON p2o.occupationID = ot.occupationtypeID
+  LEFT JOIN person2organization porg ON porg.personID = p.personID
+  LEFT JOIN organization o on o.organizationID = porg.organizationID
+  ORDER BY p.personID) AS sum`;
+  const documentQuery = `SELECT * FROM (	
+    SELECT
+		d.documentID,
+		d.abstract,
+        d.sortingDate,
+        d.letterDate,
+        d.isJulian,
+        d.researchNotes,
+		GROUP_CONCAT(DISTINCT dt.typeDesc) AS docType,
+        GROUP_CONCAT(DISTINCT l.languageDesc) AS language,
+        GROUP_CONCAT(DISTINCT rep.repoDesc) as repository,
+        GROUP_CONCAT(DISTINCT CONCAT(COALESCE(CONCAT(author.firstName, " "), ""), COALESCE(CONCAT(author.middleName, " "), ""), COALESCE(author.lastName, ""))) AS authors,
+        GROUP_CONCAT(DISTINCT CONCAT(COALESCE(CONCAT(receiver.firstName, " "), ""), COALESCE(CONCAT(receiver.middleName, " "), ""), COALESCE(receiver.lastName, ""))) AS receivers
+	FROM
+		document d
+	LEFT JOIN documenttype dt ON d.docTypeID = dt.docTypeID
+    LEFT JOIN language l ON d.languageID = l.languageID
+    LEFT JOIN repository rep ON rep.repoID = d.repositoryID
+    LEFT JOIN person2document p2da ON p2da.docID = d.documentID AND (p2da.roleID = 4 OR p2da.roleID = 1)
+    LEFT JOIN person author ON p2da.personID = author.personID
+	LEFT JOIN person2document p2dr ON p2dr.docID = d.documentID AND p2dr.roleID = 2
+    LEFT JOIN person receiver ON p2dr.personID = receiver.personID
+    GROUP BY d.documentID
+) AS doc`;
+  switch (req.body.table) {
+    case "Person":
+      sql += personQuery;
+      break;
+    case "Document":
+      sql += documentQuery;
+      break;
+    case "Place":
+      sql += "SELECT * FROM place";
+      break;
+    default:
+      return;
+  }
+  if (
+    query.length != 0 &&
+    query[0].field !== undefined &&
+    query[0].bool !== undefined &&
+    query[0].value !== undefined
+  ) {
+    sql += " WHERE ";
+    const bool = getBool(query[0].bool);
+    const field = getField(query[0].field);
+    sql += `${field} ${bool} \"${query[0].value}\"`;
 
+    for (var i = 1; i < query.length; i++) {
+      if (query[i].and) sql += " AND ";
+      else sql += " OR ";
+      const bool = getBool(query[i].bool);
+      const field = getField(query[i].field);
+      sql += `${field} ${bool} \"${query[i].value}\"`;
+    }
+  }
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    promisePool.query(sql).then(([rows, fields]) => {
+      res.json(rows);
+    });
+  } catch (error) {
+    console.error("Error running query:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.get("/query-tool-fields", async (req, res) => {
+  const queries = {
+    person_all_view: "DESCRIBE person_all_view",
+    document_all_view: "DESCRIBE document_all_view",
+    place_all_view: "DESCRIBE place_all_view",
+    organization_all_view: "DESCRIBE organization_all_view",
+    religion_all_view: "DESCRIBE religion_all_view",
+  };
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    const results = await Promise.all(
+      Object.entries(queries).map(async ([view, query]) => {
+        const [rows] = await promisePool.query(query);
+        return rows.map((row) => ({ field: row.Field, view }));
+      })
+    );
+
+    const allFields = results.flat();
+
+    res.json(allFields);
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.post("/knex-query", async (req, res) => {
+  const { tables, fields, operators, values } = req.body;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const results = [];
+
+    for (let i = 0; i < fields.length; i++) {
+      let knexQuery = knex(tables)
+        .where(fields[i], operators[i], values[i])
+        .toString();
+      const [rows] = await promisePool.query(knexQuery);
+      results.push(rows);
+    }
+
+    console.log("POST Request Received");
+    res.json(results);
+  } catch (error) {
+    console.error("Error running query:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 module.exports = router;
