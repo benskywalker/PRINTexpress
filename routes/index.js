@@ -2402,4 +2402,32 @@ router.post('/query', async (req, res) => {
 }
 );
 
+router.get('/query-tool-fields', async (req, res) => {
+  const queries = {
+    person_all_view: 'DESCRIBE person_all_view',
+    document_all_view: 'DESCRIBE document_all_view',
+    place_all_view: 'DESCRIBE place_all_view',
+    organization_all_view: 'DESCRIBE organization_all_view',
+    religion_all_view: 'DESCRIBE religion_all_view'
+  };
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    const results = await Promise.all(Object.entries(queries).map(async ([view, query]) => {
+      const [rows] = await promisePool.query(query);
+      return rows.map(row => ({ field: row.Field, view }));
+    }));
+
+    const allFields = results.flat();
+
+    res.json(allFields);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
 module.exports = router;
