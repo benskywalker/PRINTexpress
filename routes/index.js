@@ -1660,26 +1660,79 @@ ON
     mn.mentionNodeID = m.mentionNodeID;
   `;
 
-  const relationshipsQuery = `
-  SELECT 
-    r.relationshipID,
-    r.person1ID,
-    r.person2ID,
-    rt1.relationshipDesc AS relationship1to2Desc,
-    rt2.relationshipDesc AS relationship2to1Desc,
-    r.dateStart,
-    r.dateEnd,
-    r.uncertain,
-    r.dateEndCause,
-    r.relationship1to2ID,
-    r.relationship2to1ID
+//   const relationshipsQuery = `
+//   SELECT 
+//     r.relationshipID,
+//     r.person1ID,
+//     r.person2ID,
+//     rt1.relationshipDesc AS relationship1to2Desc,
+//     rt2.relationshipDesc AS relationship2to1Desc,
+//     r.dateStart,
+//     r.dateEnd,
+//     r.uncertain,
+//     r.dateEndCause,
+//     r.relationship1to2ID,
+//     r.relationship2to1ID
+// FROM 
+//     relationship r
+// JOIN 
+//     relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+// JOIN 
+//     relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID;
+//   `;
+
+const relationshipsQuery = `
+SELECT 
+  r.relationshipID,
+  r.person1ID,
+  r.person2ID,
+  rt1.relationshipDesc AS relationship1to2Desc,
+  rt2.relationshipDesc AS relationship2to1Desc,
+  r.dateStart,
+  r.dateEnd,
+  r.uncertain,
+  r.dateEndCause,
+  r.relationship1to2ID,
+  r.relationship2to1ID
 FROM 
-    relationship r
- JOIN 
-    relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
- JOIN 
-    relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID;
-  `;
+  relationship r
+left JOIN 
+  relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+left JOIN 
+  relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID;
+`;
+
+
+// const relationshipsQuery = `
+// SELECT 
+//   distinct person1ID, person2ID
+
+// FROM 
+//   relationship ;
+// `;
+
+// const relationshipsQuery = `
+// SELECT 
+//   r.relationshipID,
+//   r.person1ID,
+//   r.person2ID,
+//   rt1.relationshipDesc AS relationship1to2Desc,
+//   rt2.relationshipDesc AS relationship2to1Desc,
+//   r.dateStart,
+//   r.dateEnd,
+//   r.uncertain,
+//   r.dateEndCause,
+//   r.relationship1to2ID,
+//   r.relationship2to1ID
+// FROM 
+//   relationship r
+// LEFT JOIN 
+//   relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+// LEFT JOIN 
+//   relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+// WHERE
+//   rt1.relationshiptypeID IS NOT NULL AND rt2.relationshiptypeID IS NOT NULL;
+// `;
 
 
   try {
@@ -1869,44 +1922,16 @@ FROM
       }
     });
 
-// Process relationships
-relationshipsArr.forEach((relationship) => {
-  const person1Node = nodes.find((node) => node.person.personID === relationship.person1ID);
-  const person2Node = nodes.find((node) => node.person.personID === relationship.person2ID);
+    relationshipsArr.forEach((relationship) => {
+      const person1Node = nodes.find((node) => node.person.personID === relationship.person1ID);
+      const person2Node = nodes.find((node) => node.person.personID === relationship.person2ID);
+    
+      //if edge does not exist, create a new edge
 
-  const person1Id = generateUniqueId('person', relationship.person1ID);
-  const person2Id = generateUniqueId('person', relationship.person2ID);
+      
 
-  // Add relationship to person1 node
-  if (person1Node) {
-    person1Node.relations.push({
-      ...relationship,
-      person: {
-        personID: person2Node.person.personID,
-        fullName: person2Node.person.fullName,
-      },
     });
-  }
-
-  // Add relationship to person2 node
-  if (person2Node) {
-    person2Node.relations.push({
-      ...relationship,
-      person: {
-        personID: person1Node.person.personID,
-        fullName: person1Node.person.fullName,
-      },
-    });
-  }
-
-  // Create edge between person1 and person2
-  edges.push({
-    from: person1Id,
-    to: person2Id,
-    type: 'relationship',
-  });
-
-});
+    
 
     
    // Process mentions
