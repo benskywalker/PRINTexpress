@@ -4,6 +4,7 @@ const router = express.Router();
 const fs = require("fs");
 const path = require("path");
 const scpClient = require("scp2");
+const knex = require("knex")(require("../knexfile"));
 require("dotenv").config();
 
 // Import the database connection
@@ -2254,60 +2255,59 @@ router.get("/personFullName/:id", async (req, res) => {
   }
 });
 
-router.post('/query', async (req, res) => {
+router.post("/query", async (req, res) => {
   const getBool = (bool) => {
-    switch(bool) {
-      case 'Equals':
-        return '=';
-      case 'Not Equals':
-        return '!=';
-      case 'Greater Than':
-        return '>';
-      case 'Less Than':
-        return '<';
-      case 'Greater Than or Equal To':
-        return '>=';
-      case 'Less Than or Equal To':
-        return '<=';
+    switch (bool) {
+      case "Equals":
+        return "=";
+      case "Not Equals":
+        return "!=";
+      case "Greater Than":
+        return ">";
+      case "Less Than":
+        return "<";
+      case "Greater Than or Equal To":
+        return ">=";
+      case "Less Than or Equal To":
+        return "<=";
       default:
         return bool.toUpperCase();
     }
   };
 
   const getField = (field) => {
-    switch(field) {
-      case 'First Name':
-        return 'firstName';
-      case 'Middle Name':
-        return 'middleName';
-      case 'Last Name':
-        return 'lastName';
-      case 'Person':
-        return 'personStdName';
-      case 'Place':
-        return 'placeStdName';
-      case 'Keyword':
-        return 'keyword';
-      case 'Organization':
-        return 'organizationDesc';
-      case 'Occupation':
-        return 'occupationDesc';
-      case 'Religion':
-        return 'religionDesc';
-      case 'Relationship':
-        return 'relationshipDesc';
-      case 'Repository':
-        return 'repositoryName';
+    switch (field) {
+      case "First Name":
+        return "firstName";
+      case "Middle Name":
+        return "middleName";
+      case "Last Name":
+        return "lastName";
+      case "Person":
+        return "personStdName";
+      case "Place":
+        return "placeStdName";
+      case "Keyword":
+        return "keyword";
+      case "Organization":
+        return "organizationDesc";
+      case "Occupation":
+        return "occupationDesc";
+      case "Religion":
+        return "religionDesc";
+      case "Relationship":
+        return "relationshipDesc";
+      case "Repository":
+        return "repositoryName";
       default:
         return field;
     }
   };
 
-  console.log('POST request received');
+  console.log("POST request received");
   const query = req.body.query;
-  let sql = '';
-  const personQuery = 
-  `SELECT * FROM (SELECT
+  let sql = "";
+  const personQuery = `SELECT * FROM (SELECT
 	  p.personID,
     CONCAT(COALESCE(CONCAT(p.firstName, " "), ""), COALESCE(CONCAT(p.middleName, " "), "" ), COALESCE(p.lastName, "")) AS fullName,
     p.firstName,
@@ -2333,8 +2333,7 @@ router.post('/query', async (req, res) => {
   LEFT JOIN person2organization porg ON porg.personID = p.personID
   LEFT JOIN organization o on o.organizationID = porg.organizationID
   ORDER BY p.personID) AS sum`;
-  const documentQuery = 
-  `SELECT * FROM (	
+  const documentQuery = `SELECT * FROM (	
     SELECT
 		d.documentID,
 		d.abstract,
@@ -2358,35 +2357,38 @@ router.post('/query', async (req, res) => {
     LEFT JOIN person receiver ON p2dr.personID = receiver.personID
     GROUP BY d.documentID
 ) AS doc`;
-  switch(req.body.table) {
-    case 'Person':
+  switch (req.body.table) {
+    case "Person":
       sql += personQuery;
       break;
-    case 'Document':
+    case "Document":
       sql += documentQuery;
       break;
-    case 'Place':
-      sql += 'SELECT * FROM place';
+    case "Place":
+      sql += "SELECT * FROM place";
       break;
     default:
       return;
   }
-  if(query.length != 0 && query[0].field !== undefined && query[0].bool !== undefined && query[0].value !== undefined) {
-    sql += ' WHERE ';
+  if (
+    query.length != 0 &&
+    query[0].field !== undefined &&
+    query[0].bool !== undefined &&
+    query[0].value !== undefined
+  ) {
+    sql += " WHERE ";
     const bool = getBool(query[0].bool);
     const field = getField(query[0].field);
     sql += `${field} ${bool} \"${query[0].value}\"`;
 
-  for(var i = 1; i < query.length; i++) {
-    if(query[i].and)
-      sql += ' AND ';
-    else
-      sql += ' OR ';
-    const bool = getBool(query[i].bool);
-    const field = getField(query[i].field);
-    sql += `${field} ${bool} \"${query[i].value}\"`;
+    for (var i = 1; i < query.length; i++) {
+      if (query[i].and) sql += " AND ";
+      else sql += " OR ";
+      const bool = getBool(query[i].bool);
+      const field = getField(query[i].field);
+      sql += `${field} ${bool} \"${query[i].value}\"`;
+    }
   }
-}
 
   try {
     const db = await dbPromise;
@@ -2396,38 +2398,62 @@ router.post('/query', async (req, res) => {
       res.json(rows);
     });
   } catch (error) {
-    console.error('Error running query:', error);
-    res.status(500).send('Internal Server Error');
+    console.error("Error running query:", error);
+    res.status(500).send("Internal Server Error");
   }
-}
-);
+});
 
-router.get('/query-tool-fields', async (req, res) => {
+router.get("/query-tool-fields", async (req, res) => {
   const queries = {
-    person_all_view: 'DESCRIBE person_all_view',
-    document_all_view: 'DESCRIBE document_all_view',
-    place_all_view: 'DESCRIBE place_all_view',
-    organization_all_view: 'DESCRIBE organization_all_view',
-    religion_all_view: 'DESCRIBE religion_all_view'
+    person_all_view: "DESCRIBE person_all_view",
+    document_all_view: "DESCRIBE document_all_view",
+    place_all_view: "DESCRIBE place_all_view",
+    organization_all_view: "DESCRIBE organization_all_view",
+    religion_all_view: "DESCRIBE religion_all_view",
   };
 
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
 
-    const results = await Promise.all(Object.entries(queries).map(async ([view, query]) => {
-      const [rows] = await promisePool.query(query);
-      return rows.map(row => ({ field: row.Field, view }));
-    }));
+    const results = await Promise.all(
+      Object.entries(queries).map(async ([view, query]) => {
+        const [rows] = await promisePool.query(query);
+        return rows.map((row) => ({ field: row.Field, view }));
+      })
+    );
 
     const allFields = results.flat();
 
     res.json(allFields);
   } catch (error) {
-    console.error('Error fetching data:', error);
-    res.status(500).send('Internal Server Error');
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
   }
 });
 
+router.post("/knex-query", async (req, res) => {
+  const { tables, fields, operators, values } = req.body;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const results = [];
+
+    for (let i = 0; i < fields.length; i++) {
+      let knexQuery = knex(tables)
+        .where(fields[i], operators[i], values[i])
+        .toString();
+      const [rows] = await promisePool.query(knexQuery);
+      results.push(rows);
+    }
+
+    console.log("POST Request Received");
+    res.json(results);
+  } catch (error) {
+    console.error("Error running query:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 module.exports = router;
