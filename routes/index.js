@@ -2070,12 +2070,11 @@ GROUP_CONCAT(DISTINCT CONCAT(receiver.firstName, " ", receiver.lastName)) AS rec
 DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date 
 FROM document d
 LEFT JOIN pdf_documents pdf ON pdf.documentID = d.documentID
-LEFT JOIN person2document p2d ON p2d.docID = d.documentID
+LEFT JOIN person2document p2d ON p2d.docID = d.documentID AND (p2d.roleID = 1 OR p2d.roleID = 4)
 LEFT JOIN person sender ON p2d.personID = sender.personID
-LEFT JOIN person2document p2d2 ON p2d2.docID = d.documentID
+LEFT JOIN person2document p2d2 ON p2d2.docID = d.documentID AND p2d2.roleID = 2
 LEFT JOIN person receiver ON p2d2.personID = receiver.personID
-WHERE ((p2d.roleID = 1 AND p2d2.roleID = 2) OR (p2d.roleID = 4))
-AND (sender.personID = ${personID} OR receiver.personID = ${personID})
+WHERE sender.personID = ${personID} OR receiver.personID = ${personID}
 GROUP BY d.documentID;
   `;
 
