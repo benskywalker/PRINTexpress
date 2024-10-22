@@ -2052,7 +2052,6 @@ mentionsArr.forEach((mention) => {
 //get by the personID
 router.get("/person/:personID", async (req, res) => {
   const personID = req.params.personID;
-
   const personQuery = `
     SELECT *
     FROM person
@@ -2060,8 +2059,23 @@ router.get("/person/:personID", async (req, res) => {
   `;
 
   const documentQuery = `
-    SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date FROM document a, 
-    pdf_documents b, person2document c where a.documentID = b.documentID AND a.documentID = c.docID AND c.personID = ${personID};
+SELECT d.*, 
+GROUP_CONCAT(pdf.internalPDFname) AS internalPDFname,
+GROUP_CONCAT(pdf.pdfDesc) AS pdfDesc,
+GROUP_CONCAT(pdf.pdfURL) AS pdfURL,
+GROUP_CONCAT(pdf.pdfID) AS pdfID,
+GROUP_CONCAT(DISTINCT CONCAT(sender.firstName, " ", sender.lastName)) AS sender,
+GROUP_CONCAT(DISTINCT CONCAT(receiver.firstName, " ", receiver.lastName)) AS receiver,
+DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date 
+FROM document d
+LEFT JOIN pdf_documents pdf ON pdf.documentID = d.documentID
+LEFT JOIN person2document p2d ON p2d.docID = d.documentID
+LEFT JOIN person sender ON p2d.personID = sender.personID
+LEFT JOIN person2document p2d2 ON p2d2.docID = d.documentID
+LEFT JOIN person receiver ON p2d2.personID = receiver.personID
+WHERE ((p2d.roleID = 1 AND p2d2.roleID = 2) OR (p2d.roleID = 4))
+AND (sender.personID = ${personID} OR receiver.personID = ${personID})
+GROUP BY d.documentID;
   `;
 
   const religionQuery = `
