@@ -1674,6 +1674,7 @@ LEFT JOIN
     relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
    where person1ID != person2ID
          order by relationshipID
+         limit 270
          ;
    
   
