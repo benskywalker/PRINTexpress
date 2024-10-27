@@ -2516,7 +2516,6 @@ router.get('/relations', async (req, res) => {
 
 });
 
-//combine the relations route with the graph route
 router.post("/graph2", async (req, res) => {
   const peopleQuery = `
     SELECT *
@@ -2673,10 +2672,9 @@ LEFT JOIN
       // Create nodes for documents
       documentsArr.forEach((document) => {
         const uniqueId = generateUniqueId("document", document.documentID);
-        nodes.push({ document, nodeType: "document", id: uniqueId });
+        // nodes.push({ document, nodeType: "document", id: uniqueId });
       });
 
-      // Ensure each religion node is unique by checking religionID before adding
       religionsArr.forEach((religion) => {
         const uniqueId = generateUniqueId("religion", religion.religionID);
         const existingNode = nodes.find(
@@ -2686,7 +2684,7 @@ LEFT JOIN
           nodes.push({ religion, nodeType: "religion", id: uniqueId });
         }
       });
-
+  
       // Create nodes for organizations
       organizationsArr.forEach((organization) => {
         const uniqueId = generateUniqueId(
@@ -2698,43 +2696,229 @@ LEFT JOIN
 
 
       // Process document connections
+      // documentConnectionsArr.forEach((connection) => {
+      //   const documentId = generateUniqueId("document", connection.docID);
+      //   const document = documentsArr.find(
+      //     (doc) => generateUniqueId("document", doc.documentID) === documentId
+      //   );
+
+      //   if(document && connection.roleID === 1) {
+      //     const senderId = generateUniqueId("person", connection.personID);
+      //     edges.push({
+      //       document,
+      //       from: senderId,
+      //       to: documentId,
+      //       type: "document",
+      //     });
+
+      //   }else if(document && connection.roleID === 2) {
+      //     const receiverId = generateUniqueId("person", connection.personID);
+      //     edges.push({
+      //       document,
+      //       from: documentId,
+      //       to: receiverId,
+      //       type: "document",
+      //     });
+      //   }else if(!document && connection.roleID === 1){
+      //     const senderId = generateUniqueId("person", connection.personID);
+      //     edges.push({
+      //       from: senderId,
+      //       to: null,
+      //       type: "document",
+      //     });
+      //   }else if( !document && connection.roleID === 2){
+      //     const receiverId = generateUniqueId("person", connection.personID);
+      //     edges.push({
+      //       from: null,
+      //       to: receiverId,
+      //       type: "document",
+      //     });
+      //   }
+      // });
+
       documentConnectionsArr.forEach((connection) => {
         const documentId = generateUniqueId("document", connection.docID);
         const document = documentsArr.find(
           (doc) => generateUniqueId("document", doc.documentID) === documentId
         );
-
-        if(document && connection.roleID === 1) {
+  
+        if (connection.roleID === 1) {
+          // Sender
           const senderId = generateUniqueId("person", connection.personID);
-          edges.push({
-            document,
-            from: senderId,
-            to: documentId,
-            type: "document",
-          });
-
-        }else if(document && connection.roleID === 2) {
+  
+          // Find the existing edge for the document where 'from' is null (i.e., sender not assigned)
+          const edge = edges.find(
+            (edge) => edge.document.documentID === connection.docID && !edge.from
+          );
+  
+          if (edge) {
+            edge.from = senderId; // Update the 'from' field for sender
+          } else {
+            edges.push({
+              document,
+              from: senderId,
+              to: null, // Initially null as we may not know receiver yet
+              type: "document",
+            });
+          }
+  
+          // Update the sender's documents array
+          const senderNode = personNodeMap.get(senderId);
+          if (
+            senderNode &&
+            !senderNode.documents.some(
+              (doc) => doc.document.documentID === document.documentID
+            )
+          ) {
+            //get the receiver of the document
+            const receiverID = documentConnectionsArr.find(
+              (connection) =>
+                connection.docID === document.documentID &&
+                connection.roleID === 2
+            );
+            const receiver = peopleArr.find(
+              (person) => person.personID === receiverID?.personID
+            );
+  
+            receiverFullName = `${receiver?.firstName} ${receiver?.lastName}`;
+            senderNode.documents.push({
+              document: {
+                ...document,
+                sender: senderNode.person.fullName,
+                receiver: receiverFullName,
+                type: "document",
+              },
+            });
+          }
+        } else if (connection.roleID === 2) {
+          // Receiver
           const receiverId = generateUniqueId("person", connection.personID);
+  
+          // Find the edge that has the documentID and either has no 'to' or no 'from' (because sender might not be known yet)
+          const edge = edges.find(
+            (edge) =>
+              edge.document.documentID === connection.docID &&
+              (!edge.to || !edge.from)
+          );
+  
+          if (edge) {
+            edge.to = receiverId; // Update the 'to' field for receiver
+          } else {
+            edges.push({
+              document,
+              from: null, // Initially null as we may not know sender yet
+              to: receiverId,
+              type: "document",
+            });
+          }
+  
+          // Update the receiver's documents array
+          const receiverNode = personNodeMap.get(receiverId);
+          if (
+            receiverNode &&
+            !receiverNode.documents.some(
+              (doc) => doc.document.documentID === document.documentID
+            )
+          ) {
+            //get the sender of the document
+            const senderID = documentConnectionsArr.find(
+              (connection) =>
+                connection.docID === document.documentID &&
+                connection.roleID === 1
+            );
+            const sender = peopleArr.find(
+              (person) => person.personID === senderID?.personID
+            );
+            const senderFullName = `${sender?.firstName} ${sender?.lastName}`;
+            receiverNode.documents.push({
+              document: {
+                ...document,
+                sender: senderFullName,
+                receiver: receiverNode.person.fullName,
+                type: "document",
+              },
+            });
+          }
+        } else if (connection.roleID === 3) {
+          // Mentioned
+          const mentionedId = generateUniqueId("person", connection.personID);
           edges.push({
             document,
+            // From author node to mentioned person node
             from: documentId,
-            to: receiverId,
-            type: "document",
+            to: mentionedId,
+            type: "mentioned",
           });
-        }else if(!document && connection.roleID === 1){
-          const senderId = generateUniqueId("person", connection.personID);
+  
+          // Update the mentioned person's documents array
+          const mentionedNode = personNodeMap.get(mentionedId);
+          if (
+            mentionedNode &&
+            !mentionedNode.documents.some(
+              (doc) => doc.document.documentID === document.documentID
+            )
+          ) {
+            mentionedNode.documents.push({ document, role: "Mentioned" });
+          }
+        } else if (connection.roleID === 4) {
+          // Author
+          const authorId = generateUniqueId("person", connection.personID);
           edges.push({
-            from: senderId,
-            to: null,
-            type: "document",
+            document,
+            // From author node to whoever receives the document
+            from: authorId,
+            to: documentId,
+            type: "author",
           });
-        }else if( !document && connection.roleID === 2){
-          const receiverId = generateUniqueId("person", connection.personID);
-          edges.push({
-            from: null,
-            to: receiverId,
-            type: "document",
-          });
+  
+          // Update the author's documents array
+          const authorNode = personNodeMap.get(authorId);
+          if (
+            authorNode &&
+            !authorNode.documents.some(
+              (doc) => doc.document.documentID === document.documentID
+            )
+          ) {
+            authorNode.documents.push({ document, role: "Author" });
+          }
+        } else if (connection.roleID === 5) {
+          // Waypoint
+          const waypointId = generateUniqueId("person", connection.personID); // Generate the waypoint person node ID
+  
+          // Find the edge that has the documentID and either no 'from' or 'to' (i.e., sender or receiver might not be known yet)
+          const edge = edges.find(
+            (edge) =>
+              edge.document.documentID === connection.docID &&
+              (!edge.from || !edge.to)
+          );
+  
+          // If the edge exists, update the 'to' field with the waypoint person ID
+          if (edge) {
+            edge.to = waypointId;
+          } else {
+            // If the edge does not exist, create a new edge with the waypoint person ID
+            edges.push({
+              document,
+              from: null, // Initially null as sender might not be known yet
+              to: waypointId,
+              type: "document",
+            });
+          }
+  
+          // Update the waypoint person's node to include the document in their documents array
+          const waypointNode = personNodeMap.get(waypointId);
+          if (
+            waypointNode &&
+            !waypointNode.documents.some(
+              (doc) => doc.document.documentID === document.documentID
+            )
+          ) {
+            waypointNode.documents.push({
+              document,
+              sender: null,
+              waypoint: waypointNode.person,
+            });
+          }
         }
       });
 
@@ -2793,38 +2977,30 @@ LEFT JOIN
             }
           });
 
-      // Create edges for people to religions
-      religionConnectionsArr.forEach((connection) => {
-        const religionId = generateUniqueId("religion", connection.religionID);
-        const personId = generateUniqueId("person", connection.personID);
-        
-        //find person in nodes
-        const personNode = nodes.find(node => node.id === personId);
-        //find religion in nodes
-        const religionNode = nodes.find(node => node.id === religionId);
-
-        if(personNode && religionNode){
-        edges.push({
-          from: personId,
-          to: religionId,
-          type: "religion",
-        });
-      }
+      // Create edges for people to religions (with from/to fields and type)
+    religionConnectionsArr.forEach((connection) => {
+      const religionId = generateUniqueId("religion", connection.religionID);
+      const personId = generateUniqueId("person", connection.personID);
+      edges.push({
+        from: personId, // From person node
+        to: religionId, // To religion node
+        type: "religion",
       });
+    });
 
-      // Create edges for people to organizations
-      organizationConnectionsArr.forEach((connection) => {
-        const organizationId = generateUniqueId(
-          "organization",
-          connection.organizationID
-        );
-        const personId = generateUniqueId("person", connection.personID);
-        edges.push({
-          from: personId,
-          to: organizationId,
-          type: "organization",
-        });
+    // Create edges for people to organizations (with from/to fields and type)
+    organizationConnectionsArr.forEach((connection) => {
+      const organizationId = generateUniqueId(
+        "organization",
+        connection.organizationID
+      );
+      const personId = generateUniqueId("person", connection.personID);
+      edges.push({
+        from: personId, // From person node
+        to: organizationId, // To organization node
+        type: "organization",
       });
+    });
 
       // Filter out edges where 'from' or 'to' is null
       const filteredEdges = edges.filter(
