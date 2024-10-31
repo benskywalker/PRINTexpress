@@ -2637,7 +2637,7 @@ ORDER BY relationshipID;
       const personNode = {
         person: {
           ...person,
-          fullName: `${person.firstName} ${person.lastName}`,
+          fullName: (`${person.firstName} ${person.lastName}`).replace(/\b\w/g, l => l.toUpperCase()),
         },
         nodeType: "person",
         id: uniqueId,
@@ -2653,6 +2653,9 @@ ORDER BY relationshipID;
       documentsArr.forEach((document) => {
         const uniqueId = generateUniqueId("document", document.documentID);
         nodes.push({ document, nodeType: "document", id: uniqueId });
+        
+
+        
       });        
 
       // Ensure each religion node is unique by checking religionID before adding
@@ -2691,6 +2694,30 @@ ORDER BY relationshipID;
             to: documentId,
             type: "document",
           });
+          // Update the sender's documents array
+          const senderNode = personNodeMap.get(senderId);
+          const senderFullNamelower = `${senderNode.person.firstName} ${senderNode.person.lastName}`;
+          const receiverID = documentConnectionsArr.find(
+            (connection) =>
+              connection.docID === document.documentID &&
+              connection.roleID === 2
+          );
+          const receiver = peopleArr.find(
+            (person) => person.personID === receiverID?.personID
+          );
+          receiverFullNamelower = `${receiver?.firstName} ${receiver?.lastName}`;
+          //make senderfullname and receiverfullname title case
+          const senderFullName = senderFullNamelower.replace(/\b\w/g, l => l.toUpperCase());
+          const receiverFullName = receiverFullNamelower.replace(/\b\w/g, l => l.toUpperCase());
+          if (senderNode) {
+            senderNode.documents.push({
+              document: {
+                ...document,
+                sender: senderFullName,
+                receiver: receiverFullName,
+              },
+            });
+          }
         }else if(connection.roleID == 2){
           // Receiver
           const receiverId = generateUniqueId("person", connection.personID);
@@ -2700,6 +2727,31 @@ ORDER BY relationshipID;
             to: receiverId,
             type: "document",
           });
+          // Update the receiver's documents array
+          const receiverNode = personNodeMap.get(receiverId);
+          const receiverFullNamelower = `${receiverNode.person.firstName} ${receiverNode.person.lastName}`;
+          const senderID = documentConnectionsArr.find(
+            (connection) =>
+              connection.docID === document.documentID &&
+              connection.roleID === 1
+          );
+          const sender = peopleArr.find(
+            (person) => person.personID === senderID?.personID
+          );
+          const senderFullNamelower = `${sender?.firstName} ${sender?.lastName}`;
+          //make senderfullname and receiverfullname title case
+          const senderFullName = senderFullNamelower.replace(/\b\w/g, l => l.toUpperCase());
+          const receiverFullName = receiverFullNamelower.replace(/\b\w/g, l => l.toUpperCase());
+          if (receiverNode) {
+            receiverNode.documents.push({
+              document:
+              {
+                ...document,
+                receiver: receiverFullName,
+                sender: senderFullName
+              },
+            });
+          }
         }else if(connection.roleID == 3){
           // Mentioned
           const mentionedId = generateUniqueId("person", connection.personID);
@@ -2709,6 +2761,13 @@ ORDER BY relationshipID;
             to: mentionedId,
             type: "mentioned",
           });
+          // Update the mentioned person's documents array
+          const mentionedNode = personNodeMap.get(mentionedId);
+          if (mentionedNode) {
+            mentionedNode.documents.push({
+              document,
+            });
+          }
         }else if(connection.roleID == 4){
           // Author
           const authorId = generateUniqueId("person", connection.personID);
@@ -2718,6 +2777,13 @@ ORDER BY relationshipID;
             to: documentId,
             type: "author",
           });
+          // Update the author's documents array
+          const authorNode = personNodeMap.get(authorId);
+          if (authorNode) {
+            authorNode.documents.push({
+              document,
+            });
+          }
         }else if(connection.roleID == 5){
           // Waypoint
           const waypointId = generateUniqueId("person", connection.personID);
@@ -2727,6 +2793,13 @@ ORDER BY relationshipID;
             to: waypointId,
             type: "document",
           });
+          // Update the waypoint person's documents array
+          const waypointNode = personNodeMap.get(waypointId);
+          if (waypointNode) {
+            waypointNode.documents.push({
+              document,
+            });
+          }
         }else{
           console.log("Unknown roleID:", connection.roleID);
         }
