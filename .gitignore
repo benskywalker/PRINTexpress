@@ -3,4 +3,4 @@ node_modules/
 .env
 
 # ingonore everything in public/pdf
-# public/pdf/*
+public/pdf/*
