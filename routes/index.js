@@ -2846,6 +2846,31 @@ ORDER BY relationshipID;
         dateEnd: relationship.dateEnd || "N/A",
       });
 
+      // Update the person nodes with relationships
+      const person1Node = personNodeMap.get(person1Id);
+      const person2Node = personNodeMap.get(person2Id);
+
+      if (person1Node) {
+        person1Node.relations.push({
+          relationship: {
+            ...relationship,
+            person1: person1Node.person.fullName,
+            person2: person2Node.person.fullName,
+          },
+        });
+      }
+
+      if (person2Node) {
+        person2Node.relations.push({
+          relationship: {
+            ...relationship,
+            person1: person1Node.person.fullName,
+            person2: person2Node.person.fullName,
+          },
+        });
+      }
+    
+
       
         
       
