@@ -2652,7 +2652,30 @@ ORDER BY relationshipID;
       // Create nodes for documents
       documentsArr.forEach((document) => {
         const uniqueId = generateUniqueId("document", document.documentID);
-        nodes.push({ document, nodeType: "document", id: uniqueId });
+        //create document name for each document
+        //document name: Sender fullname - Receiver fullname - Date
+        const senderID = documentConnectionsArr.find(
+          (connection) =>
+            connection.docID === document.documentID &&
+            connection.roleID === 1
+        );
+        const sender = peopleArr.find(
+          (person) => person.personID === senderID?.personID
+        );
+        const senderFullNamelower = `${sender?.firstName} ${sender?.lastName}`;
+        const receiverID = documentConnectionsArr.find(
+          (connection) =>
+            connection.docID === document.documentID &&
+            connection.roleID === 2
+        );
+        const receiver = peopleArr.find(
+          (person) => person.personID === receiverID?.personID
+        );
+        const receiverFullNamelower = `${receiver?.firstName} ${receiver?.lastName}`;
+        const senderFullName = senderFullNamelower.replace(/\b\w/g, l => l.toUpperCase());
+        const receiverFullName = receiverFullNamelower.replace(/\b\w/g, l => l.toUpperCase());
+        const documentName = `${senderFullName} - ${receiverFullName} - ${document.date}`;
+        nodes.push({ document, nodeType: "document", id: uniqueId, documentName });
         
 
         
