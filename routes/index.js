@@ -2409,11 +2409,11 @@ router.post("/query", async (req, res) => {
 
 router.get("/query-tool-fields", async (req, res) => {
   const queries = {
-    person_all_view: "DESCRIBE person_all_view",
-    document_all_view: "DESCRIBE document_all_view",
-    place_all_view: "DESCRIBE place_all_view",
-    organization_all_view: "DESCRIBE organization_all_view",
-    religion_all_view: "DESCRIBE religion_all_view",
+    person: "DESCRIBE person",
+    document: "DESCRIBE document",
+    place: "DESCRIBE place",
+    organization: "DESCRIBE organization",
+    religion: "DESCRIBE religion",
   };
 
   try {
@@ -2437,35 +2437,49 @@ router.get("/query-tool-fields", async (req, res) => {
 });
 
 router.post("/knex-query", async (req, res) => {
-  const { tables, fields, operators, values, logicalOperators } = req.body;
+  const { tables, fields, operators, values, dependentFields } = req.body;
 
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
     const results = [];
 
-    let knexQuery = knex(tables);
+    let knexQuery;
 
-    for (let i = 0; i < fields.length; i++) {
-      if (i === 0) {
-        knexQuery = knexQuery.where(fields[i], operators[i], values[i]);
-      } else {
-        if (logicalOperators && logicalOperators[i - 1]) {
-          if (logicalOperators[i - 1].toLowerCase() === "and") {
-            knexQuery = knexQuery.andWhere(fields[i], operators[i], values[i]);
-          } else if (logicalOperators[i - 1].toLowerCase() === "or") {
-            knexQuery = knexQuery.orWhere(fields[i], operators[i], values[i]);
-          }
+    if (tables.length > 1) {
+      // Define the first CTE for `secondary_ids`
+      const secondaryIdsQuery = knex(tables[0])
+        .select(fields[0]) // "docID" in person2document
+        .where(fields[1], operators[0], values[0]); // e.g., personID = 446
+
+      // Use `.with()` to create the CTE
+      knexQuery = knex
+        .with("secondary_ids", secondaryIdsQuery)
+        .select("*")
+        .from(tables[1]) // `document` table
+        .whereIn(
+          dependentFields[0],
+          knex.select(fields[0]).from("secondary_ids")
+        );
+    } else {
+      // Single table scenario without CTEs
+      knexQuery = knex(tables[0]).select("*");
+
+      // Apply filters for single table scenario
+      for (let i = 0; i < fields.length; i++) {
+        if (i === 0) {
+          knexQuery = knexQuery.where(fields[i], operators[i], values[i]);
         } else {
           knexQuery = knexQuery.andWhere(fields[i], operators[i], values[i]);
         }
       }
     }
 
+    // Execute the query
     const [rows] = await promisePool.query(knexQuery.toString());
     results.push(rows);
 
-    console.log("POST Request Received");
+    console.log("POST Request Received with CTEs");
     res.json(results);
   } catch (error) {
     console.error("Error running query:", error);
@@ -2587,11 +2601,6 @@ ORDER BY relationshipID;
     SELECT *
     FROM person2organization;
   `;
- 
-
-
-  
-
 
   try {
     const db = await dbPromise;
@@ -2620,8 +2629,6 @@ ORDER BY relationshipID;
     const religionConnectionsArr = religionConnectionResults;
     const organizationConnectionsArr = organizationConnectionResults;
 
-
-
     const edges = [];
     const nodes = [];
 
@@ -2649,94 +2656,89 @@ ORDER BY relationshipID;
       personNodeMap.set(uniqueId, personNode);
     });
 
-      // Create nodes for documents
-      documentsArr.forEach((document) => {
-        const uniqueId = generateUniqueId("document", document.documentID);
-        nodes.push({ document, nodeType: "document", id: uniqueId });
-      });        
+    // Create nodes for documents
+    documentsArr.forEach((document) => {
+      const uniqueId = generateUniqueId("document", document.documentID);
+      nodes.push({ document, nodeType: "document", id: uniqueId });
+    });
 
-      // Ensure each religion node is unique by checking religionID before adding
-      religionsArr.forEach((religion) => {
-        const uniqueId = generateUniqueId("religion", religion.religionID);
-        const existingNode = nodes.find(
-          (node) => node.id === uniqueId && node.nodeType === "religion"
-        );
-        if (!existingNode) {
-          nodes.push({ religion, nodeType: "religion", id: uniqueId });
-        }
-      });
+    // Ensure each religion node is unique by checking religionID before adding
+    religionsArr.forEach((religion) => {
+      const uniqueId = generateUniqueId("religion", religion.religionID);
+      const existingNode = nodes.find(
+        (node) => node.id === uniqueId && node.nodeType === "religion"
+      );
+      if (!existingNode) {
+        nodes.push({ religion, nodeType: "religion", id: uniqueId });
+      }
+    });
 
-      // Create nodes for organizations
-      organizationsArr.forEach((organization) => {
-        const uniqueId = generateUniqueId(
-          "organization",
-          organization.organizationID
-        );
-        nodes.push({ organization, nodeType: "organization", id: uniqueId });
-      });
+    // Create nodes for organizations
+    organizationsArr.forEach((organization) => {
+      const uniqueId = generateUniqueId(
+        "organization",
+        organization.organizationID
+      );
+      nodes.push({ organization, nodeType: "organization", id: uniqueId });
+    });
 
+    documentConnectionsArr.forEach((connection) => {
+      const documentId = generateUniqueId("document", connection.docID);
+      const document = documentsArr.find(
+        (doc) => generateUniqueId("document", doc.documentID) === documentId
+      );
 
-      documentConnectionsArr.forEach((connection) => {
-        const documentId = generateUniqueId("document", connection.docID);
-        const document = documentsArr.find(
-          (doc) => generateUniqueId("document", doc.documentID) === documentId
-        );
+      if (connection.roleID == 1) {
+        // Sender
+        const senderId = generateUniqueId("person", connection.personID);
+        edges.push({
+          document,
+          from: senderId,
+          to: documentId,
+          type: "document",
+        });
+      } else if (connection.roleID == 2) {
+        // Receiver
+        const receiverId = generateUniqueId("person", connection.personID);
+        edges.push({
+          document,
+          from: documentId,
+          to: receiverId,
+          type: "document",
+        });
+      } else if (connection.roleID == 3) {
+        // Mentioned
+        const mentionedId = generateUniqueId("person", connection.personID);
+        edges.push({
+          document,
+          from: documentId,
+          to: mentionedId,
+          type: "mentioned",
+        });
+      } else if (connection.roleID == 4) {
+        // Author
+        const authorId = generateUniqueId("person", connection.personID);
+        edges.push({
+          document,
+          from: authorId,
+          to: documentId,
+          type: "author",
+        });
+      } else if (connection.roleID == 5) {
+        // Waypoint
+        const waypointId = generateUniqueId("person", connection.personID);
+        edges.push({
+          document,
+          from: documentId,
+          to: waypointId,
+          type: "document",
+        });
+      } else {
+        console.log("Unknown roleID:", connection.roleID);
+      }
+    });
 
-        if(connection.roleID == 1){
-          // Sender
-          const senderId = generateUniqueId("person", connection.personID);
-          edges.push({
-            document,
-            from: senderId,
-            to: documentId,
-            type: "document",
-          });
-        }else if(connection.roleID == 2){
-          // Receiver
-          const receiverId = generateUniqueId("person", connection.personID);
-          edges.push({
-            document,
-            from: documentId,
-            to: receiverId,
-            type: "document",
-          });
-        }else if(connection.roleID == 3){
-          // Mentioned
-          const mentionedId = generateUniqueId("person", connection.personID);
-          edges.push({
-            document,
-            from: documentId,
-            to: mentionedId,
-            type: "mentioned",
-          });
-        }else if(connection.roleID == 4){
-          // Author
-          const authorId = generateUniqueId("person", connection.personID);
-          edges.push({
-            document,
-            from: authorId,
-            to: documentId,
-            type: "author",
-          });
-        }else if(connection.roleID == 5){
-          // Waypoint
-          const waypointId = generateUniqueId("person", connection.personID);
-          edges.push({
-            document,
-            from: documentId,
-            to: waypointId,
-            type: "document",
-          });
-        }else{
-          console.log("Unknown roleID:", connection.roleID);
-        }
-
-       })
-
-
-        
     relationshipsArr.forEach((relationship) => {
-
       const person1Id = generateUniqueId("person", relationship.person1ID);
       const person2Id = generateUniqueId("person", relationship.person2ID);
 
@@ -2749,10 +2751,6 @@ ORDER BY relationshipID;
         dateStart: relationship.dateStart || "N/A",
         dateEnd: relationship.dateEnd || "N/A",
       });
-
-      
-        
-      
     });
 
     // Create edges for people to religions (with from/to fields and type)
@@ -2791,13 +2789,6 @@ ORDER BY relationshipID;
       elength: filteredEdges.length,
       nlength: nodes.length,
     });
-
-   
- 
-
-
-
-
   } catch (error) {
     console.error("Error fetching data:", error);
     res.status(500).send("Internal Server Error");
