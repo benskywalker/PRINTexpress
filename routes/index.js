@@ -2210,7 +2210,7 @@ router.get("/pdf/:pdfName", (req, res) => {
   if (fs.existsSync(localPdfPath)) {
     return res.sendFile(localPdfPath);
   }else{
-    return res.status(404).send("File not found");
+    return res.send("File not found");
   }
 
   // // Download the PDF from the remote server
