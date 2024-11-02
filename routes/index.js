@@ -2465,12 +2465,14 @@ router.post("/knex-query", async (req, res) => {
       // Single table scenario without CTEs
       knexQuery = knex(tables[0]).select("*");
 
+      knexQuery = knexQuery.where(fields[0], operators[0], values[0]);
+
       // Apply filters for single table scenario
-      for (let i = 0; i < fields.length; i++) {
-        if (i === 0) {
-          knexQuery = knexQuery.where(fields[i], operators[i], values[i]);
-        } else {
+      for (let i = 1; i < fields.length; i++) {
+        if (dependentFields[i - 1] == "AND") {
           knexQuery = knexQuery.andWhere(fields[i], operators[i], values[i]);
+        } else {
+          knexQuery = knexQuery.orWhere(fields[i], operators[i], values[i]);
         }
       }
     }
