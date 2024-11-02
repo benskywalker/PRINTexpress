@@ -2211,7 +2211,7 @@ router.get("/pdf/:pdfName", (req, res) => {
     return res.sendFile(localPdfPath);
   }
 
-  // Download the PDF from the remote server
+  // // Download the PDF from the remote server
   scpClient.scp(
     {
       host: sshConfig.host,
