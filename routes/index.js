@@ -1420,6 +1420,73 @@ router.get("/documents", async (req, res) => {
   }
 });
 
+//Get all documents for the gallery using document view
+router.get("/gallery/docs", async (req, res) => {
+  console.log("GET request received");
+
+  const query = `
+  SELECT *
+  FROM document_all_view;
+  `;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    promisePool.query(query).then(([rows, fields]) => {
+      const documents = rows.map((row) => {
+        return {
+          documentID: row.documentID,
+          importID: row.importID,
+          collection: row.collection,
+          abstract: row.abstract,
+          letterDate: row.letterDate,
+          sortingDate: row.sortingDate,
+          isJulian: row.isJulian,
+          researchNotes: row.researchNotes,
+          customCitation: row.customCitation,
+          docTypeID: row.docTypeID,
+          documentLanguageID: row.documentLanguageID,
+          repositoryID: row.repositoryID,
+          dateAdded: row.dateAdded,
+          status: row.status,
+          whoCheckedOut: row.whoCheckedOut,
+          volume: row.volume,
+          page: row.page,
+          folder: row.folder,
+          transcription: row.transcription,
+          translation: row.translation,
+          virtual_doc: row.virtual_doc,
+          dbNotes: row.dbNotes,
+          person2DocID: row.person2DocID,
+          personRole: row.personRole,
+          roleDesc: row.roleDesc,
+          author: row.author,
+          authorFirstName: row['Author First Name'],
+          authorMiddleName: row['Author Middle Name'],
+          authorLastName: row['Author Last Name'],
+          person2Role: row.person2Role,
+          receiver: row.receiver,
+          receiverFirstName: row['Receiver First Name'],
+          receiverMiddleName: row['Receiver Middle Name'],
+          receiverLastName: row['Receiver Last Name'],
+          authorStdName: row.authorStdName,
+          receiverStdName: row.receiverStdName,
+          organization2DocID: row.organization2DocumnetID,
+          organizationID: row.organizationID,
+          organization: row.organizationDesc,
+          organizationRole: row.orgRole
+        };
+      });
+      return res.json(documents);
+    });
+  } catch (error) {
+    console.error("Failed to run query:", error);
+    res.status(500).json({ error: "Failed to run query" });
+    return;
+  }
+});
+
 router.get("/religion", async (req, res) => {
   const people = `
   select
