@@ -2407,6 +2407,11 @@ router.post("/query", async (req, res) => {
   }
 });
 
+
+
+
+
+
 router.get("/query-tool-fields", async (req, res) => {
   const queries = {
     person: "DESCRIBE person",
@@ -2435,6 +2440,56 @@ router.get("/query-tool-fields", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
+
+const convertDataToGraph = async (data) => {
+  const nodes = [];
+  const edges = [];
+  const db = await dbPromise;
+  const promisePool = db.promise();
+
+  const edgePromises = data.map(async (row) => {
+    if (row.personID) {
+      nodes.push({
+        id: `person_${row.personID}`,
+        label: `${row.firstName} ${row.lastName}`,
+        group: "person",
+        ...row
+      });
+
+      // Query junction tables to get the edges for the person
+      const personID = row.personID;
+      const person2documentQuery = `
+        SELECT *
+        FROM person2document
+        WHERE personID = ${personID};
+      `;
+
+      const [rows] = await promisePool.query(person2documentQuery);
+      rows.forEach((row) => {
+        edges.push({
+          from: `person_${personID}`,
+          to: `document_${row.docID}`,
+          role: row.roleID,
+        });
+        //push the document to the nodes array
+        nodes.push({
+          id: `document_${row.docID}`,
+          label: `${row.docID}`,
+          group: "document",
+        });
+      });
+    }
+  });
+
+  await Promise.all(edgePromises);
+
+  return { nodes, edges };
+};
+
+
+
+
 
 router.post("/knex-query", async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
@@ -2479,7 +2534,10 @@ router.post("/knex-query", async (req, res) => {
 
     // Execute the query
     const [rows] = await promisePool.query(knexQuery.toString());
-    results.push(rows);
+
+    // Convert the data to a graph
+    const { nodes, edges } = await convertDataToGraph(rows);
+    results.push(rows, edges, nodes);
 
     console.log("POST Request Received with CTEs");
     res.json(results);
