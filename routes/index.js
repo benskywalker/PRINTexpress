@@ -2517,11 +2517,12 @@ const convertDataToGraph = async (data) => {
 
   const edgePromises = data.map(async (row) => {
     if (row.personID) {
+      const fullNameTitleCase = (`${row.firstName} ${row.lastName}`).replace(/\b\w/g, l => l.toUpperCase());
       nodes.push({
         id: `person_${row.personID}`,
-        label: `${row.firstName} ${row.lastName}`,
         group: "person",
-        ...row
+        person: { fullName: fullNameTitleCase, ...row },
+        documents: []
       });
 
       // Query junction tables to get the edges for the person
@@ -2533,19 +2534,94 @@ const convertDataToGraph = async (data) => {
       `;
 
       const [rows] = await promisePool.query(person2documentQuery);
-      rows.forEach((row) => {
+      const documentPromises = rows.map(async (row) => {
         edges.push({
           from: `person_${personID}`,
           to: `document_${row.docID}`,
           role: row.roleID,
         });
-        //push the document to the nodes array
+
+        // Push the document node to the nodes array
         nodes.push({
           id: `document_${row.docID}`,
           label: `${row.docID}`,
           group: "document",
+          ...row
         });
+
+        // Fetch document from database by docID
+        const documentQuery = `
+          SELECT
+            d.*,
+            pd.internalPDFname,
+            pd.pdfDesc,
+            pd.pdfURL,
+            pd.pdfID,
+            DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date
+          FROM document d
+          LEFT JOIN pdf_documents pd ON pd.documentID = d.documentID
+          WHERE d.documentID = ${row.docID};
+        `;
+        const [documentRows] = await promisePool.query(documentQuery);
+        const document = documentRows[0];
+
+        if (document) {
+          const documentConnectionsQuery = `
+            SELECT *
+            FROM person2document
+            WHERE docID = ${row.docID};
+          `;
+          const [documentConnectionsArr] = await promisePool.query(documentConnectionsQuery);
+
+          const peopleQuery = `
+            SELECT *
+            FROM person;
+          `;
+          const [peopleArr] = await promisePool.query(peopleQuery);
+
+          // Get sender and receiver full name for the document
+          const senderPromise = new Promise((resolve) => {
+            const senderID = documentConnectionsArr.find(
+              (connection) =>
+                connection.docID === document.documentID && connection.roleID === 1
+            );
+            const sender = peopleArr.find(
+              (person) => person.personID === senderID?.personID
+            );
+            const senderFullName = `${sender?.firstName} ${sender?.lastName}`;
+            resolve(senderFullName);
+          });
+
+          const receiverPromise = new Promise((resolve) => {
+            const receiverID = documentConnectionsArr.find(
+              (connection) =>
+                connection.docID === document.documentID && connection.roleID === 2
+            );
+            const receiver = peopleArr.find(
+              (person) => person.personID === receiverID?.personID
+            );
+            const receiverFullName = `${receiver?.firstName} ${receiver?.lastName}`;
+            resolve(receiverFullName);
+          });
+
+          const [senderFullName, receiverFullName] = await Promise.all([senderPromise, receiverPromise]);
+
+          // Push the document to the person's documents array
+          const personNode = nodes.find(node => node.id === `person_${personID}`);
+          if (personNode) {
+            personNode.documents.push({
+              document: {
+                ...document,
+                sender: senderFullName,
+                receiver: receiverFullName,
+                date: document.sortingDate,
+              },
+            });
+          }
+        }
       });
+
+      await Promise.all(documentPromises);
     }
   });
 
@@ -2553,7 +2629,6 @@ const convertDataToGraph = async (data) => {
 
   return { nodes, edges };
 };
-
 
 
 
@@ -2567,8 +2642,9 @@ router.post("/knex-query", async (req, res) => {
     const results = [];
 
     let knexQuery;
+    console.log(tables);
 
-    if (tables.length > 1) {
+    if (tables && tables.length > 1) {
       // Define the first CTE for `secondary_ids`
       const secondaryIdsQuery = knex(tables[0])
         .select(fields[0]) // "docID" in person2document
@@ -2583,7 +2659,7 @@ router.post("/knex-query", async (req, res) => {
           dependentFields[0],
           knex.select(fields[0]).from("secondary_ids")
         );
-    } else {
+    } else if (tables && tables.length === 1) {
       // Single table scenario without CTEs
       knexQuery = knex(tables[0]).select("*");
 
@@ -2591,23 +2667,25 @@ router.post("/knex-query", async (req, res) => {
 
       // Apply filters for single table scenario
       for (let i = 1; i < fields.length; i++) {
-        if (dependentFields[i - 1] == "AND") {
+        if (dependentFields[i - 1] === "AND") {
           knexQuery = knexQuery.andWhere(fields[i], operators[i], values[i]);
         } else {
           knexQuery = knexQuery.orWhere(fields[i], operators[i], values[i]);
         }
       }
-    }
+    } else {
+      console.log("Tables are not defined or empty");
+    }    
 
     // Execute the query
     const [rows] = await promisePool.query(knexQuery.toString());
 
     // Convert the data to a graph
     const { nodes, edges } = await convertDataToGraph(rows);
-    results.push(rows, edges, nodes);
+    results.push({rows, edges, nodes});
 
     console.log("POST Request Received with CTEs");
-    res.json(results);
+    res.json({rows, edges, nodes});
   } catch (error) {
     console.error("Error running query:", error);
     res.status(500).send("Internal Server Error");
