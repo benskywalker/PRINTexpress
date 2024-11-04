@@ -166,16 +166,17 @@ router.get("/persons", async (req, res) => {
     p.birthDate,
     p.deathDate,
     p.personStdName,
-    r.religionDesc as religion,
-    l.languageDesc as language,
-    o.organizationDesc AS organization
+    GROUP_CONCAT(r.religionDesc) as religion,
+    GROUP_CONCAT(l.languageDesc) as language,
+    GROUP_CONCAT(o.organizationDesc) AS organization
   FROM
 	  person p
   LEFT JOIN person2religion pr ON pr.personID = p.personID
   LEFT JOIN religion r ON r.religionID = pr.religionID
   LEFT JOIN language l on l.languageID = p.language_id
   LEFT JOIN person2organization p2org ON p.personID = p2org.personID
-  LEFT JOIN organization o ON o.organizationID = p2org.organizationID`;
+  LEFT JOIN organization o ON o.organizationID = p2org.organizationID
+  GROUP BY p.personID`;
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
@@ -2160,14 +2161,19 @@ GROUP BY d.documentID;
 
   const religionQuery = `
     SELECT *
-    FROM religion
-    WHERE religionID = (SELECT religionID FROM person2religion WHERE personID = ${personID});
+    FROM religion r
+    LEFT JOIN person2religion p2r ON p2r.religionID = r.religionID
+    WHERE p2r.personID = ${personID};
   `;
 
   const organizationQuery = `
-    SELECT *
-    FROM organization
-    WHERE organizationID = (SELECT organizationID FROM person2organization WHERE personID = ${personID});
+    SELECT 
+	  GROUP_CONCAT(DISTINCT o.organizationID) as organizationID,
+    GROUP_CONCAT(DISTINCT o.organizationDesc) AS orgranization
+    FROM organization o
+    LEFT JOIN person2organization p2org ON p2org.organizationID = o.organizationID
+    WHERE p2org.personID = ${personID}
+    GROUP BY p2org.personID
   `;
 
   const mentionQuery = `
