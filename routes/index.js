@@ -167,12 +167,15 @@ router.get("/persons", async (req, res) => {
     p.deathDate,
     p.personStdName,
     r.religionDesc as religion,
-    l.languageDesc as language
+    l.languageDesc as language,
+    o.organizationDesc AS organization
   FROM
 	  person p
   LEFT JOIN person2religion pr ON pr.personID = p.personID
   LEFT JOIN religion r ON r.religionID = pr.religionID
-  LEFT JOIN language l on l.languageID = p.language_id`;
+  LEFT JOIN language l on l.languageID = p.language_id
+  LEFT JOIN person2organization p2org ON p.personID = p2org.personID
+  LEFT JOIN organization o ON o.organizationID = p2org.organizationID`;
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
