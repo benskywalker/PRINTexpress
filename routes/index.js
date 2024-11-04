@@ -166,9 +166,9 @@ router.get("/persons", async (req, res) => {
     p.birthDate,
     p.deathDate,
     p.personStdName,
-    GROUP_CONCAT(r.religionDesc) as religion,
-    GROUP_CONCAT(l.languageDesc) as language,
-    GROUP_CONCAT(o.organizationDesc) AS organization
+    GROUP_CONCAT(DISTINCT r.religionDesc) as religion,
+    GROUP_CONCAT(DISTINCT l.languageDesc) as language,
+    GROUP_CONCAT(DISTINCT o.organizationDesc) AS organization
   FROM
 	  person p
   LEFT JOIN person2religion pr ON pr.personID = p.personID
