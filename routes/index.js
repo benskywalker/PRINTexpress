@@ -1475,7 +1475,8 @@ router.get("/gallery/docs", async (req, res) => {
           organization2DocID: row.organization2DocumnetID,
           organizationID: row.organizationID,
           organization: row.organizationDesc,
-          organizationRole: row.orgRole
+          organizationRole: row.orgRole,
+          internalPDFname: row.internalPDFname
         };
       });
       return res.json(documents);
