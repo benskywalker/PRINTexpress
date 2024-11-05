@@ -2280,9 +2280,11 @@ router.get("/pdf/:pdfName", (req, res) => {
   // Check if the PDF exists locally
   if (fs.existsSync(localPdfPath)) {
     return res.sendFile(localPdfPath);
+  }else{
+    return res.status(404).send("PDF not found");
   }
 
-  // // Download the PDF from the remote server
+  // Download the PDF from the remote server
   scpClient.scp(
     {
       host: sshConfig.host,
