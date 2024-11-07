@@ -2932,11 +2932,13 @@ router.post("/graph2", async (req, res) => {
         });
 
       nodes.push({
-        document,
+        document: {
+          ...document,
+          documentName,
+          connections,
+        },
         nodeType: "document",
         id: uniqueId,
-        documentName,
-        connections,
       });
     });
 
