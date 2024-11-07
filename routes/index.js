@@ -1466,21 +1466,21 @@ router.get("/gallery/docs", async (req, res) => {
           personRole: row.personRole,
           roleDesc: row.roleDesc,
           author: row.author,
-          authorFirstName: row['Author First Name'],
-          authorMiddleName: row['Author Middle Name'],
-          authorLastName: row['Author Last Name'],
+          authorFirstName: row["Author First Name"],
+          authorMiddleName: row["Author Middle Name"],
+          authorLastName: row["Author Last Name"],
           person2Role: row.person2Role,
           receiver: row.receiver,
-          receiverFirstName: row['Receiver First Name'],
-          receiverMiddleName: row['Receiver Middle Name'],
-          receiverLastName: row['Receiver Last Name'],
+          receiverFirstName: row["Receiver First Name"],
+          receiverMiddleName: row["Receiver Middle Name"],
+          receiverLastName: row["Receiver Last Name"],
           authorStdName: row.authorStdName,
           receiverStdName: row.receiverStdName,
           organization2DocID: row.organization2DocumnetID,
           organizationID: row.organizationID,
           organization: row.organizationDesc,
           organizationRole: row.orgRole,
-          internalPDFname: row.internalPDFname
+          internalPDFname: row.internalPDFname,
         };
       });
       return res.json(documents);
@@ -2286,7 +2286,7 @@ router.get("/pdf/:pdfName", (req, res) => {
   // Check if the PDF exists locally
   if (fs.existsSync(localPdfPath)) {
     return res.sendFile(localPdfPath);
-  }else{
+  } else {
     return res.status(404).send("PDF not found");
   }
 
@@ -2486,11 +2486,6 @@ router.post("/query", async (req, res) => {
   }
 });
 
-
-
-
-
-
 router.get("/query-tool-fields", async (req, res) => {
   const queries = {
     person: "DESCRIBE person",
@@ -2520,7 +2515,6 @@ router.get("/query-tool-fields", async (req, res) => {
   }
 });
 
-
 const convertDataToGraph = async (data) => {
   const nodes = [];
   const edges = [];
@@ -2529,12 +2523,15 @@ const convertDataToGraph = async (data) => {
 
   const edgePromises = data.map(async (row) => {
     if (row.personID) {
-      const fullNameTitleCase = (`${row.firstName} ${row.lastName}`).replace(/\b\w/g, l => l.toUpperCase());
+      const fullNameTitleCase = `${row.firstName} ${row.lastName}`.replace(
+        /\b\w/g,
+        (l) => l.toUpperCase()
+      );
       nodes.push({
         id: `person_${row.personID}`,
         group: "person",
         person: { fullName: fullNameTitleCase, ...row },
-        documents: []
+        documents: [],
       });
 
       // Query junction tables to get the edges for the person
@@ -2558,7 +2555,7 @@ const convertDataToGraph = async (data) => {
           id: `document_${row.docID}`,
           label: `${row.docID}`,
           group: "document",
-          ...row
+          ...row,
         });
 
         // Fetch document from database by docID
@@ -2583,7 +2580,9 @@ const convertDataToGraph = async (data) => {
             FROM person2document
             WHERE docID = ${row.docID};
           `;
-          const [documentConnectionsArr] = await promisePool.query(documentConnectionsQuery);
+          const [documentConnectionsArr] = await promisePool.query(
+            documentConnectionsQuery
+          );
 
           const peopleQuery = `
             SELECT *
@@ -2595,7 +2594,8 @@ const convertDataToGraph = async (data) => {
           const senderPromise = new Promise((resolve) => {
             const senderID = documentConnectionsArr.find(
               (connection) =>
-                connection.docID === document.documentID && connection.roleID === 1
+                connection.docID === document.documentID &&
+                connection.roleID === 1
             );
             const sender = peopleArr.find(
               (person) => person.personID === senderID?.personID
@@ -2607,7 +2607,8 @@ const convertDataToGraph = async (data) => {
           const receiverPromise = new Promise((resolve) => {
             const receiverID = documentConnectionsArr.find(
               (connection) =>
-                connection.docID === document.documentID && connection.roleID === 2
+                connection.docID === document.documentID &&
+                connection.roleID === 2
             );
             const receiver = peopleArr.find(
               (person) => person.personID === receiverID?.personID
@@ -2616,10 +2617,15 @@ const convertDataToGraph = async (data) => {
             resolve(receiverFullName);
           });
 
-          const [senderFullName, receiverFullName] = await Promise.all([senderPromise, receiverPromise]);
+          const [senderFullName, receiverFullName] = await Promise.all([
+            senderPromise,
+            receiverPromise,
+          ]);
 
           // Push the document to the person's documents array
-          const personNode = nodes.find(node => node.id === `person_${personID}`);
+          const personNode = nodes.find(
+            (node) => node.id === `person_${personID}`
+          );
           if (personNode) {
             personNode.documents.push({
               document: {
@@ -2641,9 +2647,6 @@ const convertDataToGraph = async (data) => {
 
   return { nodes, edges };
 };
-
-
-
 
 router.post("/knex-query", async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
@@ -2687,17 +2690,17 @@ router.post("/knex-query", async (req, res) => {
       }
     } else {
       console.log("Tables are not defined or empty");
-    }    
+    }
 
     // Execute the query
     const [rows] = await promisePool.query(knexQuery.toString());
 
     // Convert the data to a graph
     const { nodes, edges } = await convertDataToGraph(rows);
-    results.push({rows, edges, nodes});
+    results.push({ rows, edges, nodes });
 
     console.log("POST Request Received with CTEs");
-    res.json({rows, edges, nodes});
+    res.json({ rows, edges, nodes });
   } catch (error) {
     console.error("Error running query:", error);
     res.status(500).send("Internal Server Error");
@@ -2767,9 +2770,9 @@ router.post("/graph2", async (req, res) => {
   `;
 
   const documentsQuery = `
-      SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date FROM document a, 
-  pdf_documents b where a.documentID = b.documentID;
-    `;
+    SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date FROM document a, 
+    pdf_documents b where a.documentID = b.documentID;
+  `;
 
   const documentConnectionsQuery = `
     SELECT *
@@ -2777,26 +2780,26 @@ router.post("/graph2", async (req, res) => {
   `;
 
   const relationshipsQuery = `
-SELECT
-    r.relationshipID,
-    r.person1ID,
-    r.person2ID,
-    COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
-    COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
-    r.dateStart,
-    r.dateEnd,
-    r.uncertain,
-    r.dateEndCause,
-    r.relationship1to2ID,
-    r.relationship2to1ID
-FROM
-    relationship r
- left JOIN
-    relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
- left JOIN
-    relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-WHERE person1ID != person2ID
-ORDER BY relationshipID;
+    SELECT
+      r.relationshipID,
+      r.person1ID,
+      r.person2ID,
+      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+      r.dateStart,
+      r.dateEnd,
+      r.uncertain,
+      r.dateEndCause,
+      r.relationship1to2ID,
+      r.relationship2to1ID
+    FROM
+      relationship r
+    LEFT JOIN
+      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+    LEFT JOIN
+      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+    WHERE person1ID != person2ID
+    ORDER BY relationshipID;
   `;
 
   const religionQuery = `
@@ -2855,6 +2858,15 @@ ORDER BY relationshipID;
     // Create a map for person nodes to easily update their documents array
     const personNodeMap = new Map();
 
+    // Mapping of role IDs to role names
+    const roleNames = {
+      1: "Sender",
+      2: "Receiver",
+      3: "Mentioned",
+      4: "Author",
+      5: "Waypoint",
+    };
+
     // Create nodes for people
     peopleArr.forEach((person) => {
       const uniqueId = generateUniqueId("person", person.personID);
@@ -2879,13 +2891,8 @@ ORDER BY relationshipID;
     // Create nodes for documents
     documentsArr.forEach((document) => {
       const uniqueId = generateUniqueId("document", document.documentID);
-      nodes.push({ document, nodeType: "document", id: uniqueId });
-    });
-    // Create nodes for documents
-    documentsArr.forEach((document) => {
-      const uniqueId = generateUniqueId("document", document.documentID);
-      //create document name for each document
-      //document name: Sender fullname - Receiver fullname - Date
+
+      // Create document name: Sender fullname - Receiver fullname - Date
       const senderID = documentConnectionsArr.find(
         (connection) =>
           connection.docID === document.documentID && connection.roleID === 1
@@ -2893,7 +2900,7 @@ ORDER BY relationshipID;
       const sender = peopleArr.find(
         (person) => person.personID === senderID?.personID
       );
-      const senderFullNamelower = `${sender?.firstName} ${sender?.lastName}`;
+      const senderFullNameLower = `${sender?.firstName} ${sender?.lastName}`;
       const receiverID = documentConnectionsArr.find(
         (connection) =>
           connection.docID === document.documentID && connection.roleID === 2
@@ -2901,19 +2908,39 @@ ORDER BY relationshipID;
       const receiver = peopleArr.find(
         (person) => person.personID === receiverID?.personID
       );
-      const receiverFullNamelower = `${receiver?.firstName} ${receiver?.lastName}`;
-      const senderFullName = senderFullNamelower.replace(/\b\w/g, (l) =>
+      const receiverFullNameLower = `${receiver?.firstName} ${receiver?.lastName}`;
+      const senderFullName = senderFullNameLower.replace(/\b\w/g, (l) =>
         l.toUpperCase()
       );
-      const receiverFullName = receiverFullNamelower.replace(/\b\w/g, (l) =>
+      const receiverFullName = receiverFullNameLower.replace(/\b\w/g, (l) =>
         l.toUpperCase()
       );
       const documentName = `${senderFullName} - ${receiverFullName} - ${document.date}`;
+
+      // Get connections for this document with full names and role names
+      const connections = documentConnectionsArr
+        .filter((connection) => connection.docID === document.documentID)
+        .map((connection) => {
+          const person = peopleArr.find(
+            (p) => p.personID === connection.personID
+          );
+          const personFullName =
+            `${person?.firstName} ${person?.lastName}`.replace(/\b\w/g, (l) =>
+              l.toUpperCase()
+            );
+          const roleName = roleNames[connection.roleID] || "Unknown";
+          return {
+            personFullName,
+            roleName,
+          };
+        });
+
       nodes.push({
         document,
         nodeType: "document",
         id: uniqueId,
         documentName,
+        connections,
       });
     });
 
@@ -2954,20 +2981,18 @@ ORDER BY relationshipID;
         });
         // Update the sender's documents array
         const senderNode = personNodeMap.get(senderId);
-        const senderFullNamelower = `${senderNode.person.firstName} ${senderNode.person.lastName}`;
+        const senderFullNameLower = `${senderNode.person.firstName} ${senderNode.person.lastName}`;
         const receiverID = documentConnectionsArr.find(
-          (connection) =>
-            connection.docID === document.documentID && connection.roleID === 2
+          (conn) => conn.docID === document.documentID && conn.roleID === 2
         );
         const receiver = peopleArr.find(
           (person) => person.personID === receiverID?.personID
         );
-        receiverFullNamelower = `${receiver?.firstName} ${receiver?.lastName}`;
-        //make senderfullname and receiverfullname title case
-        const senderFullName = senderFullNamelower.replace(/\b\w/g, (l) =>
+        const receiverFullNameLower = `${receiver?.firstName} ${receiver?.lastName}`;
+        const senderFullName = senderFullNameLower.replace(/\b\w/g, (l) =>
           l.toUpperCase()
         );
-        const receiverFullName = receiverFullNamelower.replace(/\b\w/g, (l) =>
+        const receiverFullName = receiverFullNameLower.replace(/\b\w/g, (l) =>
           l.toUpperCase()
         );
         if (senderNode) {
@@ -2990,20 +3015,18 @@ ORDER BY relationshipID;
         });
         // Update the receiver's documents array
         const receiverNode = personNodeMap.get(receiverId);
-        const receiverFullNamelower = `${receiverNode.person.firstName} ${receiverNode.person.lastName}`;
+        const receiverFullNameLower = `${receiverNode.person.firstName} ${receiverNode.person.lastName}`;
         const senderID = documentConnectionsArr.find(
-          (connection) =>
-            connection.docID === document.documentID && connection.roleID === 1
+          (conn) => conn.docID === document.documentID && conn.roleID === 1
         );
         const sender = peopleArr.find(
           (person) => person.personID === senderID?.personID
         );
-        const senderFullNamelower = `${sender?.firstName} ${sender?.lastName}`;
-        //make senderfullname and receiverfullname title case
-        const senderFullName = senderFullNamelower.replace(/\b\w/g, (l) =>
+        const senderFullNameLower = `${sender?.firstName} ${sender?.lastName}`;
+        const senderFullName = senderFullNameLower.replace(/\b\w/g, (l) =>
           l.toUpperCase()
         );
-        const receiverFullName = receiverFullNamelower.replace(/\b\w/g, (l) =>
+        const receiverFullName = receiverFullNameLower.replace(/\b\w/g, (l) =>
           l.toUpperCase()
         );
         if (receiverNode) {
@@ -3107,18 +3130,18 @@ ORDER BY relationshipID;
       }
     });
 
-    // Create edges for people to religions (with from/to fields and type)
+    // Create edges for people to religions
     religionConnectionsArr.forEach((connection) => {
       const religionId = generateUniqueId("religion", connection.religionID);
       const personId = generateUniqueId("person", connection.personID);
       edges.push({
-        from: personId, // From person node
-        to: religionId, // To religion node
+        from: personId,
+        to: religionId,
         type: "religion",
       });
     });
 
-    // Create edges for people to organizations (with from/to fields and type)
+    // Create edges for people to organizations
     organizationConnectionsArr.forEach((connection) => {
       const organizationId = generateUniqueId(
         "organization",
@@ -3126,8 +3149,8 @@ ORDER BY relationshipID;
       );
       const personId = generateUniqueId("person", connection.personID);
       edges.push({
-        from: personId, // From person node
-        to: organizationId, // To organization node
+        from: personId,
+        to: organizationId,
         type: "organization",
       });
     });
