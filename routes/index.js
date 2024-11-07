@@ -2521,129 +2521,125 @@ const convertDataToGraph = async (data) => {
   const db = await dbPromise;
   const promisePool = db.promise();
 
-  const edgePromises = data.map(async (row) => {
+  const personPromises = data.map(async (row) => {
     if (row.personID) {
       const fullNameTitleCase = `${row.firstName} ${row.lastName}`.replace(
         /\b\w/g,
         (l) => l.toUpperCase()
       );
-      nodes.push({
-        id: `person_${row.personID}`,
-        group: "person",
-        person: { fullName: fullNameTitleCase, ...row },
-        documents: [],
-      });
+      // Add person node if not already added
+      if (!nodes.find((node) => node.id === `person_${row.personID}`)) {
+        nodes.push({
+          id: `person_${row.personID}`,
+          label: fullNameTitleCase,
+          group: "person",
+          person: { fullName: fullNameTitleCase, ...row },
+          documents: [],
+        });
+      }
 
-      // Query junction tables to get the edges for the person
       const personID = row.personID;
+
+      // Get all documents associated with the person
       const person2documentQuery = `
         SELECT *
         FROM person2document
         WHERE personID = ${personID};
       `;
 
-      const [rows] = await promisePool.query(person2documentQuery);
-      const documentPromises = rows.map(async (row) => {
-        edges.push({
-          from: `person_${personID}`,
-          to: `document_${row.docID}`,
-          role: row.roleID,
-        });
+      const [personDocs] = await promisePool.query(person2documentQuery);
 
-        // Push the document node to the nodes array
-        nodes.push({
-          id: `document_${row.docID}`,
-          label: `${row.docID}`,
-          group: "document",
-          ...row,
-        });
+      const documentPromises = personDocs.map(async (docRelation) => {
+        const documentID = docRelation.docID;
 
-        // Fetch document from database by docID
-        const documentQuery = `
-          SELECT
-            d.*,
-            pd.internalPDFname,
-            pd.pdfDesc,
-            pd.pdfURL,
-            pd.pdfID,
-            DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date
-          FROM document d
-          LEFT JOIN pdf_documents pd ON pd.documentID = d.documentID
-          WHERE d.documentID = ${row.docID};
-        `;
-        const [documentRows] = await promisePool.query(documentQuery);
-        const document = documentRows[0];
-
-        if (document) {
-          const documentConnectionsQuery = `
-            SELECT *
-            FROM person2document
-            WHERE docID = ${row.docID};
+        // Add document node if not already added
+        if (!nodes.find((node) => node.id === `document_${documentID}`)) {
+          // Fetch document details
+          const documentQuery = `
+            SELECT
+              d.*,
+              pd.internalPDFname,
+              pd.pdfDesc,
+              pd.pdfURL,
+              pd.pdfID,
+              DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date
+            FROM document d
+            LEFT JOIN pdf_documents pd ON pd.documentID = d.documentID
+            WHERE d.documentID = ${documentID};
           `;
-          const [documentConnectionsArr] = await promisePool.query(
-            documentConnectionsQuery
-          );
+          const [documentRows] = await promisePool.query(documentQuery);
+          const document = documentRows[0];
 
-          const peopleQuery = `
-            SELECT *
-            FROM person;
-          `;
-          const [peopleArr] = await promisePool.query(peopleQuery);
-
-          // Get sender and receiver full name for the document
-          const senderPromise = new Promise((resolve) => {
-            const senderID = documentConnectionsArr.find(
-              (connection) =>
-                connection.docID === document.documentID &&
-                connection.roleID === 1
-            );
-            const sender = peopleArr.find(
-              (person) => person.personID === senderID?.personID
-            );
-            const senderFullName = `${sender?.firstName} ${sender?.lastName}`;
-            resolve(senderFullName);
-          });
-
-          const receiverPromise = new Promise((resolve) => {
-            const receiverID = documentConnectionsArr.find(
-              (connection) =>
-                connection.docID === document.documentID &&
-                connection.roleID === 2
-            );
-            const receiver = peopleArr.find(
-              (person) => person.personID === receiverID?.personID
-            );
-            const receiverFullName = `${receiver?.firstName} ${receiver?.lastName}`;
-            resolve(receiverFullName);
-          });
-
-          const [senderFullName, receiverFullName] = await Promise.all([
-            senderPromise,
-            receiverPromise,
-          ]);
-
-          // Push the document to the person's documents array
-          const personNode = nodes.find(
-            (node) => node.id === `person_${personID}`
-          );
-          if (personNode) {
-            personNode.documents.push({
-              document: {
-                ...document,
-                sender: senderFullName,
-                receiver: receiverFullName,
-                date: document.sortingDate,
-              },
+          if (document) {
+            nodes.push({
+              id: `document_${documentID}`,
+              label: `Document ${documentID}`,
+              group: "document",
+              document,
             });
           }
         }
+
+        // Create edge between person and document
+        edges.push({
+          from: `person_${personID}`,
+          to: `document_${documentID}`,
+          label: `Role ${docRelation.roleID}`,
+        });
+
+        // Now, get other persons connected to the same document
+        const documentConnectionsQuery = `
+          SELECT *
+          FROM person2document
+          WHERE docID = ${documentID} AND personID != ${personID};
+        `;
+        const [otherPersons] = await promisePool.query(
+          documentConnectionsQuery
+        );
+
+        const otherPersonPromises = otherPersons.map(
+          async (otherPersonRelation) => {
+            const otherPersonID = otherPersonRelation.personID;
+
+            // Add other person node if not already added
+            if (!nodes.find((node) => node.id === `person_${otherPersonID}`)) {
+              // Fetch person details
+              const personQuery = `
+              SELECT * FROM person WHERE personID = ${otherPersonID};
+            `;
+              const [personRows] = await promisePool.query(personQuery);
+              const otherPerson = personRows[0];
+              const otherFullNameTitleCase =
+                `${otherPerson.firstName} ${otherPerson.lastName}`.replace(
+                  /\b\w/g,
+                  (l) => l.toUpperCase()
+                );
+              nodes.push({
+                id: `person_${otherPersonID}`,
+                label: otherFullNameTitleCase,
+                group: "person",
+                person: { fullName: otherFullNameTitleCase, ...otherPerson },
+                documents: [],
+              });
+            }
+
+            // Create edge between document and other person
+            edges.push({
+              from: `document_${documentID}`,
+              to: `person_${otherPersonID}`,
+              label: `Role ${otherPersonRelation.roleID}`,
+            });
+          }
+        );
+
+        await Promise.all(otherPersonPromises);
       });
 
       await Promise.all(documentPromises);
     }
   });
 
-  await Promise.all(edgePromises);
+  await Promise.all(personPromises);
 
   return { nodes, edges };
 };
