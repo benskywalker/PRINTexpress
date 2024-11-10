@@ -2136,9 +2136,20 @@ LEFT JOIN
 router.get("/person/:personID", async (req, res) => {
   const personID = req.params.personID;
   const personQuery = `
-    SELECT *
-    FROM person
-    WHERE personID = ${personID};
+    SELECT
+    p.personID,
+    p.biography,
+    CONCAT(p.firstName, ' ', p.lastName) AS fullName,
+    p.gender,
+    p.birthDate,
+    p.deathDate,
+    p.LODLOC,
+    p.LODwikiData,
+    p.LODVIAF
+    FROM
+    person p
+    WHERE
+    p.personID = ${personID};
   `;
 
   const documentQuery = `
@@ -2169,7 +2180,7 @@ GROUP BY d.documentID;
 
   const organizationQuery = `
     SELECT 
-	  GROUP_CONCAT(DISTINCT o.organizationID) as organizationID,
+      GROUP_CONCAT(DISTINCT o.organizationID) as organizationID,
     GROUP_CONCAT(DISTINCT o.organizationDesc) AS orgranization
     FROM organization o
     LEFT JOIN person2organization p2org ON p2org.organizationID = o.organizationID
@@ -2215,26 +2226,34 @@ WHERE
   `;
 
   const relationshipQuery = `
-    SELECT 
-    r.relationshipID,
-    r.person1ID,
-    r.person2ID,
-    rt1.relationshipDesc AS relationship1to2Desc,
-    rt2.relationshipDesc AS relationship2to1Desc,
-    r.dateStart,
-    r.dateEnd,
-    r.uncertain,
-    r.dateEndCause,
-    r.relationship1to2ID,
-    r.relationship2to1ID
-FROM
-    relationship r
-JOIN
-    relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
-JOIN
-    relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-WHERE
-    r.person1ID = ${personID} OR r.person2ID = ${personID};
+
+  SELECT
+      r.relationshipID,
+      r.person1ID,
+      CONCAT(p1.firstName, ' ', p1.lastName) AS person1,
+      r.person2ID,
+      CONCAT(p2.firstName, ' ', p2.lastName) AS person2,
+      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+      r.dateStart,
+      r.dateEnd,
+      r.uncertain,
+      r.dateEndCause,
+      r.relationship1to2ID,
+      r.relationship2to1ID
+    FROM
+      relationship r
+    LEFT JOIN
+      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+    LEFT JOIN
+      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+    LEFT JOIN
+    person p1 ON r.person1ID = p1.personID
+    LEFT JOIN
+    person p2 ON r.person2ID = p2.personID
+    WHERE
+    r.person1ID = ${personID} OR r.person2ID = ${personID}
+    ORDER BY relationshipID;
   `;
 
   try {
@@ -2248,12 +2267,14 @@ WHERE
     const [mentionResults] = await promisePool.query(mentionQuery);
     const [relationshipResults] = await promisePool.query(relationshipQuery);
 
-    const person = personResults[0];
+    const person = personResults;
     const documents = documentResults;
     const religion = religionResults[0];
     const organization = organizationResults[0];
     const mentions = mentionResults;
-    const relationships = relationshipResults;
+    const relations = relationshipResults.map((rel) => ({ relationship: rel }));
+
+    console.log("Person:", person);
 
     const personNode = {
       person,
@@ -2261,7 +2282,7 @@ WHERE
       religion,
       organization,
       mentions,
-      relationships,
+      relations,
     };
 
     res.json(personNode);
@@ -2270,7 +2291,6 @@ WHERE
     res.status(500).send("Internal Server Error");
   }
 });
-
 const sshConfig = {
   host: process.env.DB_HOST,
   username: process.env.DB_SSH_USER,
@@ -2529,12 +2549,49 @@ const convertDataToGraph = async (data) => {
       );
       // Add person node if not already added
       if (!nodes.find((node) => node.id === `person_${row.personID}`)) {
+        // Fetch relationships for the person
+        const relationshipsQuery = `
+          SELECT
+      r.relationshipID,
+      r.person1ID,
+      CONCAT(p1.firstName, ' ', p1.lastName) AS person1,
+      r.person2ID,
+      CONCAT(p2.firstName, ' ', p2.lastName) AS person2,
+      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+      r.dateStart,
+      r.dateEnd,
+      r.uncertain,
+      r.dateEndCause,
+      r.relationship1to2ID,
+      r.relationship2to1ID
+    FROM
+      relationship r
+    LEFT JOIN
+      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+    LEFT JOIN
+      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+    LEFT JOIN
+    person p1 ON r.person1ID = p1.personID
+    LEFT JOIN
+    person p2 ON r.person2ID = p2.personID
+    WHERE
+    r.person1ID = ${row.personID} OR r.person2ID = ${row.personID}
+    ORDER BY relationshipID;
+        `;
+        const [relationships] = await promisePool.query(relationshipsQuery);
+
+        const relations = relationships.map((rel) => ({
+          relationship: rel,
+        }));
+
         nodes.push({
           id: `person_${row.personID}`,
           label: fullNameTitleCase,
           group: "person",
           person: { fullName: fullNameTitleCase, ...row },
           documents: [],
+          relations,
         });
       }
 
@@ -2614,12 +2671,37 @@ const convertDataToGraph = async (data) => {
                   /\b\w/g,
                   (l) => l.toUpperCase()
                 );
+
+              // Fetch relationships for the other person
+              const otherPersonRelationshipsQuery = `
+                SELECT 
+                  r.relationshipID,
+                  r.person1ID,
+                  r.person2ID,
+                  rt1.relationshipDesc AS relationship1to2Desc,
+                  rt2.relationshipDesc AS relationship2to1Desc,
+                  r.dateStart,
+                  r.dateEnd,
+                  r.uncertain,
+                  r.dateEndCause,
+                  r.relationship1to2ID,
+                  r.relationship2to1ID
+                FROM relationship r
+                LEFT JOIN relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+                LEFT JOIN relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+                WHERE r.person1ID = ${otherPersonID} OR r.person2ID = ${otherPersonID};
+              `;
+              const [otherPersonRelationships] = await promisePool.query(
+                otherPersonRelationshipsQuery
+              );
+
               nodes.push({
                 id: `person_${otherPersonID}`,
                 label: otherFullNameTitleCase,
                 group: "person",
                 person: { fullName: otherFullNameTitleCase, ...otherPerson },
                 documents: [],
+                relationships: otherPersonRelationships,
               });
             }
 
@@ -2643,121 +2725,6 @@ const convertDataToGraph = async (data) => {
 
   return { nodes, edges };
 };
-
-router.post("/knex-query", async (req, res) => {
-  const { tables, fields, operators, values, dependentFields } = req.body;
-
-  try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
-    const results = [];
-
-    let knexQuery;
-    console.log(tables);
-
-    if (tables && tables.length > 1) {
-      // Define the first CTE for `secondary_ids`
-      const secondaryIdsQuery = knex(tables[0])
-        .select(fields[0]) // "docID" in person2document
-        .where(fields[1], operators[0], values[0]); // e.g., personID = 446
-
-      // Use `.with()` to create the CTE
-      knexQuery = knex
-        .with("secondary_ids", secondaryIdsQuery)
-        .select("*")
-        .from(tables[1]) // `document` table
-        .whereIn(
-          dependentFields[0],
-          knex.select(fields[0]).from("secondary_ids")
-        );
-    } else if (tables && tables.length === 1) {
-      // Single table scenario without CTEs
-      knexQuery = knex(tables[0]).select("*");
-
-      knexQuery = knexQuery.where(fields[0], operators[0], values[0]);
-
-      // Apply filters for single table scenario
-      for (let i = 1; i < fields.length; i++) {
-        if (dependentFields[i - 1] === "AND") {
-          knexQuery = knexQuery.andWhere(fields[i], operators[i], values[i]);
-        } else {
-          knexQuery = knexQuery.orWhere(fields[i], operators[i], values[i]);
-        }
-      }
-    } else {
-      console.log("Tables are not defined or empty");
-    }
-
-    // Execute the query
-    const [rows] = await promisePool.query(knexQuery.toString());
-
-    // Convert the data to a graph
-    const { nodes, edges } = await convertDataToGraph(rows);
-    results.push({ rows, edges, nodes });
-
-    console.log("POST Request Received with CTEs");
-    res.json({ rows, edges, nodes });
-  } catch (error) {
-    console.error("Error running query:", error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-
-router.get("/relations", async (req, res) => {
-  console.log("GET request received");
-  const query = `
-  SELECT 
-    r.relationshipID,
-    r.person1ID,
-    r.person2ID,
-    rt1.relationshipDesc AS relationship1to2Desc,
-    rt2.relationshipDesc AS relationship2to1Desc,
-    r.dateStart,
-    r.dateEnd,
-    r.uncertain,
-    r.dateEndCause,
-    r.relationship1to2ID,
-    r.relationship2to1ID
-    from relationship r
-    left join relationshiptype rt1 on r.relationship1to2ID = rt1.relationshiptypeID
-    left join relationshiptype rt2 on r.relationship2to1ID = rt2.relationshiptypeID;
-  `;
-  const nodeQuery = `
-  SELECT
-    personID,
-    CONCAT(firstName, ' ', lastName) AS fullName
-  FROM person;
-  `;
-
-  try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
-    const [results] = await promisePool.query(query);
-    const [nodes] = await promisePool.query(nodeQuery);
-    const edges = results.map((result) => {
-      return {
-        relationshipID: result.relationshipID,
-        person1ID: result.person1ID,
-        person2ID: result.person2ID,
-        relationship1to2Desc: result.relationship1to2Desc,
-        relationship2to1Desc: result.relationship2to1Desc,
-        dateStart: result.dateStart,
-        dateEnd: result.dateEnd,
-        uncertain: result.uncertain,
-        dateEndCause: result.dateEndCause,
-        relationship1to2ID: result.relationship1to2ID,
-        relationship2to1ID: result.relationship2to1ID,
-        from: result.person1ID,
-        to: result.person2ID,
-      };
-    });
-
-    res.json(edges);
-  } catch (error) {
-    console.error("Error fetching data:", error);
-    res.status(500).send("Internal Server Error");
-  }
-});
 
 router.post("/graph2", async (req, res) => {
   const peopleQuery = `
@@ -3166,6 +3133,121 @@ router.post("/graph2", async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.get("/relations", async (req, res) => {
+  console.log("GET request received");
+  const query = `
+  SELECT 
+    r.relationshipID,
+    r.person1ID,
+    r.person2ID,
+    rt1.relationshipDesc AS relationship1to2Desc,
+    rt2.relationshipDesc AS relationship2to1Desc,
+    r.dateStart,
+    r.dateEnd,
+    r.uncertain,
+    r.dateEndCause,
+    r.relationship1to2ID,
+    r.relationship2to1ID
+    from relationship r
+    left join relationshiptype rt1 on r.relationship1to2ID = rt1.relationshiptypeID
+    left join relationshiptype rt2 on r.relationship2to1ID = rt2.relationshiptypeID;
+  `;
+  const nodeQuery = `
+  SELECT
+    personID,
+    CONCAT(firstName, ' ', lastName) AS fullName
+  FROM person;
+  `;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const [results] = await promisePool.query(query);
+    const [nodes] = await promisePool.query(nodeQuery);
+    const edges = results.map((result) => {
+      return {
+        relationshipID: result.relationshipID,
+        person1ID: result.person1ID,
+        person2ID: result.person2ID,
+        relationship1to2Desc: result.relationship1to2Desc,
+        relationship2to1Desc: result.relationship2to1Desc,
+        dateStart: result.dateStart,
+        dateEnd: result.dateEnd,
+        uncertain: result.uncertain,
+        dateEndCause: result.dateEndCause,
+        relationship1to2ID: result.relationship1to2ID,
+        relationship2to1ID: result.relationship2to1ID,
+        from: result.person1ID,
+        to: result.person2ID,
+      };
+    });
+
+    res.json(edges);
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.post("/knex-query", async (req, res) => {
+  const { tables, fields, operators, values, dependentFields } = req.body;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const results = [];
+
+    let knexQuery;
+    console.log(tables);
+
+    if (tables && tables.length > 1) {
+      // Define the first CTE for `secondary_ids`
+      const secondaryIdsQuery = knex(tables[0])
+        .select(fields[0]) // "docID" in person2document
+        .where(fields[1], operators[0], values[0]); // e.g., personID = 446
+
+      // Use `.with()` to create the CTE
+      knexQuery = knex
+        .with("secondary_ids", secondaryIdsQuery)
+        .select("*")
+        .from(tables[1]) // `document` table
+        .whereIn(
+          dependentFields[0],
+          knex.select(fields[0]).from("secondary_ids")
+        );
+    } else if (tables && tables.length === 1) {
+      // Single table scenario without CTEs
+      knexQuery = knex(tables[0]).select("*");
+
+      knexQuery = knexQuery.where(fields[0], operators[0], values[0]);
+
+      // Apply filters for single table scenario
+      for (let i = 1; i < fields.length; i++) {
+        if (dependentFields[i - 1] === "AND") {
+          knexQuery = knexQuery.andWhere(fields[i], operators[i], values[i]);
+        } else {
+          knexQuery = knexQuery.orWhere(fields[i], operators[i], values[i]);
+        }
+      }
+    } else {
+      console.log("Tables are not defined or empty");
+    }
+
+    // Execute the query
+    const [rows] = await promisePool.query(knexQuery.toString());
+
+    // Convert the data to a graph
+    const { nodes, edges } = await convertDataToGraph(rows);
+    results.push({ rows, edges, nodes });
+
+    console.log("POST Request Received with CTEs");
+    res.json({ rows, edges, nodes });
+  } catch (error) {
+    console.error("Error running query:", error);
     res.status(500).send("Internal Server Error");
   }
 });
