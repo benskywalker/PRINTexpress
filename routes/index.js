@@ -3252,4 +3252,352 @@ router.post("/knex-query", async (req, res) => {
   }
 });
 
+
+router.get("/nodes", async (req, res) => {
+  const peopleQuery = `
+    SELECT 
+      *
+    FROM
+      person;
+  `;
+
+  const documentsQuery = `
+    SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
+    FROM document a
+    JOIN pdf_documents b ON a.documentID = b.documentID;
+  `;
+
+  const keywordsQuery = `
+    SELECT
+      a.keywordID, a.keyword, a.keywordLOD, a.parentID, a.parcel, a.keywordDef,
+      b.keyword2DocID, b.keywordID, b.docID, b.uncertain
+    FROM
+      keyword a
+    LEFT JOIN
+      keyword2document b ON a.keywordID = b.keywordID;
+  `;
+
+  
+
+  const religionsQuery = `
+    SELECT *
+    FROM religion;
+  `;
+
+  const organizationsQuery = `
+    SELECT *
+    FROM organization;
+  `;
+
+  const people2documentQuery = `
+    SELECT *
+    FROM person2document;
+  `;
+
+  const relationshipsQuery = `
+    SELECT
+      r.relationshipID,
+      r.person1ID,
+      r.person2ID,
+      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+      r.dateStart,
+      r.dateEnd,
+      r.uncertain,
+      r.dateEndCause,
+      r.relationship1to2ID,
+      r.relationship2to1ID
+    FROM
+      relationship r
+    LEFT JOIN
+      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+    LEFT JOIN
+      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+    WHERE person1ID != person2ID
+    ORDER BY relationshipID;
+  `;
+
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+
+    // Execute all queries in parallel
+    const [
+      [peopleResults],
+      [documentResults],
+      [religionResults],
+      [organizationResults],
+      [people2documentResults],
+      [relationshipsResults],
+      [keywordsResults]
+    ] = await Promise.all([
+      promisePool.query(peopleQuery),
+      promisePool.query(documentsQuery),
+      promisePool.query(religionsQuery),
+      promisePool.query(organizationsQuery),
+      promisePool.query(people2documentQuery),
+      promisePool.query(relationshipsQuery),
+      promisePool.query(keywordsQuery)
+    ]);
+
+    const nodesMap = new Map();
+
+    // Process People
+    peopleResults.forEach((person) => {
+      nodesMap.set(`person_${person.personID}`, {
+        id: `person_${person.personID}`,
+        fullName: `${person.firstName} ${person.lastName}`.replace(/\b\w/g, (l) => l.toUpperCase()),
+        documents: [],
+        relations: [],
+        mentions: [],
+        group: "person",
+        nodeType: "person",
+        ...person
+      });
+    });
+
+    // Process Documents
+    documentResults.forEach((document) => {
+      nodesMap.set(`document_${document.documentID}`, {
+        id: `document_${document.documentID}`,
+        label: `${document.documentID}`,
+        group: "document",
+        nodeType: "document",
+        keywords: [],
+        ...document
+      });
+    });
+
+    // Process Keywords
+    keywordsResults.forEach((keyword) => {
+      const document = nodesMap.get(`document_${keyword.docID}`);
+      if (document) {
+        document.keywords.push(keyword.keyword);
+        // console.log(keyword);
+      }
+    });
+
+    // Process Religions
+    religionResults.forEach((religion) => {
+      nodesMap.set(`religion_${religion.religionID}`, {
+        id: `religion_${religion.religionID}`,
+        label: religion.religionDesc,
+        group: "religion",
+        nodeType: "religion",
+        ...religion
+      });
+    });
+
+    // Process Organizations
+    organizationResults.forEach((organization) => {
+      nodesMap.set(`organization_${organization.organizationID}`, {
+        id: `organization_${organization.organizationID}`,
+        label: organization.organizationDesc,
+        group: "organization",
+        nodeType: "organization",
+        ...organization
+      });
+    });
+
+    // Process Person to Document Relationships
+    people2documentResults.forEach((connection) => {
+      const personNode = nodesMap.get(`person_${connection.personID}`);
+      const documentNode = nodesMap.get(`document_${connection.docID}`);
+
+      //add sender and receiver to document
+      const senderID = people2documentResults.find(
+        (connection) =>
+          connection.docID === documentNode.documentID && connection.roleID === 1
+      );
+
+      const sender = peopleResults.find(
+        (person) => person.personID === senderID?.personID
+      );
+
+      const senderFullNamelower = `${sender?.firstName} ${sender?.lastName}`;
+
+      const receiverID = people2documentResults.find(
+        (connection) =>
+          connection.docID === documentNode.documentID && connection.roleID === 2
+      );
+
+      const receiver = peopleResults.find(
+        (person) => person.personID === receiverID?.personID
+      );
+
+      const receiverFullNamelower = `${receiver?.firstName} ${receiver?.lastName}`;
+
+      const senderFullName = senderFullNamelower.replace(/\b\w/g, (l) =>
+        l.toUpperCase()
+      );
+      const receiverFullName = receiverFullNamelower.replace(/\b\w/g, (l) =>
+        l.toUpperCase()
+      );
+
+      documentNode.sender = senderFullName;
+      documentNode.receiver = receiverFullName;
+      
+      if (personNode && documentNode) {
+        personNode.documents.push({document: documentNode});
+      }
+    });
+
+    // Process Relationships
+    relationshipsResults.forEach((relationship) => {
+      const person1Node = nodesMap.get(`person_${relationship.person1ID}`);
+      const person2Node = nodesMap.get(`person_${relationship.person2ID}`);
+
+      if (person1Node && person2Node) {
+        person1Node.relations.push({
+          relationship: {
+            ...relationship,
+            person1: person1Node.fullName,
+            person2: person2Node.fullName
+          }
+        });
+        person2Node.relations.push({
+          relationship: {
+            ...relationship,
+            person1: person1Node.fullName,
+            person2: person2Node.fullName
+          }
+        });
+      }
+    });
+
+    // Construct the nodes array after all processing is done
+    const nodes = Array.from(nodesMap.values());
+    
+
+    res.json(nodes);
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+
+router.get("/edges", async (req, res) => {
+  const person2documentQuery = `
+    SELECT *
+    FROM person2document;
+  `;
+
+  const person2religionQuery = `
+    SELECT *
+    FROM person2religion;
+  `;
+
+  const person2organizationQuery = `
+    SELECT *
+    FROM person2organization;
+  `;
+
+  const relationshipQuery = `
+    SELECT
+      r.relationshipID,
+      r.person1ID,
+      r.person2ID,
+      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+      r.dateStart,
+      r.dateEnd,
+      r.uncertain,
+      r.dateEndCause,
+      r.relationship1to2ID,
+      r.relationship2to1ID
+    FROM
+      relationship r
+    LEFT JOIN
+      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+    LEFT JOIN
+      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+    WHERE person1ID != person2ID
+    ORDER BY relationshipID;
+  `;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const [person2documentResults] = await promisePool.query(person2documentQuery);
+    const [person2religionResults] = await promisePool.query(person2religionQuery);
+    const [person2organizationResults] = await promisePool.query(person2organizationQuery);
+    const [relationshipResults] = await promisePool.query(relationshipQuery);
+
+    const edgesMap = new Map();
+
+    person2documentResults.forEach((connection) => {
+      const key = `person_${connection.personID}-document_${connection.docID}`;
+      edgesMap.set(key, {
+        from: `person_${connection.personID}`,
+        to: `document_${connection.docID}`,
+        role: connection.roleID,
+        type: "document",
+        ...connection
+      });
+    });
+
+    person2religionResults.forEach((connection) => {
+      const key = `person_${connection.personID}-religion_${connection.religionID}`;
+      edgesMap.set(key, {
+        from: `person_${connection.personID}`,
+        to: `religion_${connection.religionID}`,
+        role: "religion",
+        type: "religion",
+        ...connection
+      });
+    });
+
+    person2organizationResults.forEach((connection) => {
+      const key = `person_${connection.personID}-organization_${connection.organizationID}`;
+      edgesMap.set(key, {
+        from: `person_${connection.personID}`,
+        to: `organization_${connection.organizationID}`,
+        role: "organization",
+        type: "organization",
+        ...connection
+      });
+    });
+
+    relationshipResults.forEach((relationship) => {
+      const key = `person_${relationship.person1ID}-person_${relationship.person2ID}`;
+      edgesMap.set(key, {
+        from: `person_${relationship.person1ID}`,
+        to: `person_${relationship.person2ID}`,
+        type: "relationship",
+        relationship1to2Desc: relationship.relationship1to2Desc || "Unknown",
+        relationship2to1Desc: relationship.relationship2to1Desc || "Unknown",
+        dateStart: relationship.dateStart || "N/A",
+        dateEnd: relationship.dateEnd || "N/A",
+        ...relationship
+      });
+
+      const reverseKey = `person_${relationship.person2ID}-person_${relationship.person1ID}`;
+
+      if (!edgesMap.has(reverseKey)) {
+        edgesMap.set(reverseKey, {
+          from: `person_${relationship.person2ID}`,
+          to: `person_${relationship.person1ID}`,
+          type: "relationship",
+          relationship1to2Desc: relationship.relationship2to1Desc || "Unknown",
+          relationship2to1Desc: relationship.relationship1to2Desc || "Unknown",
+          dateStart: relationship.dateStart || "N/A",
+          dateEnd: relationship.dateEnd || "N/A",
+          ...relationship
+        });
+      }
+
+    });
+
+
+    const edges = Array.from(edgesMap.values());
+
+    res.json(edges);
+  } catch (error) {
+    console.error("Error fetching data:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
 module.exports = router;
