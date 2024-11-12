@@ -3253,7 +3253,7 @@ router.post("/knex-query", async (req, res) => {
 });
 
 
-router.get("/nodes", async (req, res) => {
+router.post("/nodes", async (req, res) => {
   const peopleQuery = `
     SELECT 
       *
@@ -3478,7 +3478,7 @@ router.get("/nodes", async (req, res) => {
 });
 
 
-router.get("/edges", async (req, res) => {
+router.post("/edges", async (req, res) => {
   const person2documentQuery = `
     SELECT *
     FROM person2document;
@@ -3599,5 +3599,112 @@ router.get("/edges", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
+
+
+router.post("/nodes-query", async (req, res) => {
+  const { tables, fields, operators, values, dependentFields } = req.body;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const results = [];
+
+    let sql;
+    console.log(tables);
+
+    if (tables && tables.length > 1) {
+      sql = `
+        SELECT *
+        FROM ${tables[0]}
+        WHERE ${fields[0]} ${operators[0]} ${values[0]};
+      `;
+
+      // Execute the query
+      const [rows] = await promisePool.query(sql);
+
+      // Convert the data to a graph
+      const { nodes, edges } = await convertDataToGraph(rows);
+      results.push({ rows, edges, nodes });
+
+      console.log("POST Request Received with CTEs");
+      res.json({ rows, edges, nodes });
+    } else if (tables && tables.length === 1) {
+      sql = `
+        SELECT *
+        FROM ${tables[0]}
+        WHERE ${fields[0]} ${operators[0]} ${values[0]};
+      `;
+
+      // Execute the query
+      const [rows] = await promisePool.query(sql);
+
+      // Convert the data to a graph
+      const { nodes, edges } = await convertDataToGraph(rows);
+      results.push({ rows, edges, nodes });
+
+      console.log("POST Request Received without CTEs");
+      res.json({ rows, edges, nodes });
+    } else {
+      console.log("Tables are not defined or empty");
+    }
+  } catch (error) {
+    console.error("Error running query:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.post("/edges-query", async (req, res) => {
+  const { tables, fields, operators, values, dependentFields } = req.body;
+
+  try {
+    const db = await dbPromise;
+    const promisePool = db.promise();
+    const results = [];
+
+    let sql;
+    console.log(tables);
+
+    if (tables && tables.length > 1) {
+      sql = `
+        SELECT *
+        FROM ${tables[0]}
+        WHERE ${fields[0]} ${operators[0]} ${values[0]};
+      `;
+
+      // Execute the query
+      const [rows] = await promisePool.query(sql);
+
+      // Convert the data to a graph
+      const { nodes, edges } = await convertDataToGraph(rows);
+      results.push({ rows, edges, nodes });
+
+      console.log("POST Request Received with CTEs");
+      res.json({ rows, edges, nodes });
+    } else if (tables && tables.length === 1) {
+      sql = `
+        SELECT *
+        FROM ${tables[0]}
+        WHERE ${fields[0]} ${operators[0]} ${values[0]};
+      `;
+
+      // Execute the query
+      const [rows] = await promisePool.query(sql);
+
+      // Convert the data to a graph
+      const { nodes, edges } = await convertDataToGraph(rows);
+      results.push({ rows, edges, nodes });
+
+      console.log("POST Request Received without CTEs");
+      res.json({ rows, edges, nodes });
+    } else {
+      console.log("Tables are not defined or empty");
+    }
+  } catch (error) {
+    console.error("Error running query:", error);
+    res.status(500).send("Internal Server Error");
+  }
+}
+);
 
 module.exports = router;
