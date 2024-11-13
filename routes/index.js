@@ -3625,6 +3625,8 @@ router.post("/nodes-query", async (req, res) => {
         }
       }
 
+      console.log("HEREEEEEEE: ", sql.toString());
+
       // Execute the query
       const [rows] = await promisePool.query(sql.toString());
 
@@ -3653,7 +3655,6 @@ router.post("/nodes-query", async (req, res) => {
           const [person2documentResults] = await promisePool.query(
             person2documentQuery
           );
-          console.log("here", person2documentResults);
 
           const documentPromises = person2documentResults.map(
             async (connection) => {
@@ -3781,7 +3782,6 @@ router.post("/edges-query", async (req, res) => {
           const [person2documentResults] = await promisePool.query(
             person2documentQuery
           );
-          console.log("here", person2documentResults);
 
           const documentPromises = person2documentResults.map(
             async (connection) => {
