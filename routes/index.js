@@ -3536,7 +3536,12 @@ router.post("/edges", async (req, res) => {
         from: `person_${connection.personID}`,
         to: `document_${connection.docID}`,
         role: connection.roleID,
-        type: "document",
+        type: connection.roleID === 1 ? "sender" :
+        connection.roleID === 2 ? "receiver" :
+        connection.roleID === 3 ? "mentioned" :
+        connection.roleID === 4 ? "author" :
+        connection.roleID === 5 ? "waypoint" : undefined,
+
         ...connection,
       });
     });
