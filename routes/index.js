@@ -3358,7 +3358,7 @@ router.post("/nodes", async (req, res) => {
     documentResults.forEach((document) => {
       nodesMap.set(`document_${document.documentID}`, {
         id: `document_${document.documentID}`,
-        label: `${document.documentID}`,
+        label: `${document.importID}`,
         group: "document",
         nodeType: "document",
         keywords: [],
