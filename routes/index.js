@@ -3259,9 +3259,11 @@ router.post("/nodes", async (req, res) => {
   `;
 
   const documentsQuery = `
-    SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
+    SELECT a.*, b.internalPDFname, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
     FROM document a
-    JOIN pdf_documents b ON a.documentID = b.documentID;
+    JOIN pdf_documents b ON a.documentID = b.documentID
+    and b.fileTypeID = 2
+    ;
   `;
 
   const keywordsQuery = `
@@ -3356,6 +3358,7 @@ router.post("/nodes", async (req, res) => {
 
     // Process Documents
     documentResults.forEach((document) => {
+      console.log(document.internalPDFname);
       nodesMap.set(`document_${document.documentID}`, {
         id: `document_${document.documentID}`,
         label: `${document.importID}`,
