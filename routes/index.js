@@ -3202,7 +3202,6 @@ router.post("/knex-query", async (req, res) => {
     const results = [];
 
     let knexQuery;
-    console.log(tables);
 
     if (tables && tables.length > 1) {
       // Define the first CTE for `secondary_ids`
@@ -3244,7 +3243,6 @@ router.post("/knex-query", async (req, res) => {
     const { nodes, edges } = await convertDataToGraph(rows);
     results.push({ rows, edges, nodes });
 
-    console.log("POST Request Received with CTEs");
     res.json({ rows, edges, nodes });
   } catch (error) {
     console.error("Error running query:", error);
@@ -3611,42 +3609,104 @@ router.post("/nodes-query", async (req, res) => {
     const results = [];
 
     let sql;
-    console.log(tables);
 
-    if (tables && tables.length > 1) {
+    if (tables && tables.length > 0) {
       sql = `
         SELECT *
         FROM ${tables[0]}
-        WHERE ${fields[0]} ${operators[0]} ${values[0]};
+        WHERE ${fields[0]} ${operators[0]} '${values[0]}';
       `;
 
       // Execute the query
       const [rows] = await promisePool.query(sql);
 
-      // Convert the data to a graph
-      const { nodes, edges } = await convertDataToGraph(rows);
-      results.push({ rows, edges, nodes });
+      // Grab all possible nodes from the query
+      const nodes = [];
+      const promises = rows.map(async (row) => {
+        if (row.personID) {
+          const id = row.personID;
+          const label = `${row.firstName} ${row.lastName}`;
+          const group = "person";
+          const type = "person";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type
+          };
+          nodes.push(newNode);
 
-      console.log("POST Request Received with CTEs");
-      res.json({ rows, edges, nodes });
-    } else if (tables && tables.length === 1) {
-      sql = `
-        SELECT *
-        FROM ${tables[0]}
-        WHERE ${fields[0]} ${operators[0]} ${values[0]};
-      `;
+          // Also push the person's documents
+          const person2documentQuery = `
+            SELECT *
+            FROM person2document
+            WHERE personID = ${id};
+          `;
+          const [person2documentResults] = await promisePool.query(person2documentQuery);
+          console.log("here", person2documentResults);
 
-      // Execute the query
-      const [rows] = await promisePool.query(sql);
+          const documentPromises = person2documentResults.map(async (connection) => {
+            const documentID = connection.docID;
+            const documentQuery = `
+              SELECT *
+              FROM document
+              WHERE documentID = ${documentID};
+            `;
+            const [documentResults] = await promisePool.query(documentQuery);
+            const document = documentResults[0];
+            const newDocument = {
+              id: `document_${document.documentID}`,
+              label: `${document.documentID}`,
+              group: "document",
+              type: "document"
+            };
+            nodes.push(newDocument);
+          });
 
-      // Convert the data to a graph
-      const { nodes, edges } = await convertDataToGraph(rows);
-      results.push({ rows, edges, nodes });
+          await Promise.all(documentPromises);
+        } else if (row.documentID) {
+          const id = row.documentID;
+          const label = `${row.documentID}`;
+          const group = "document";
+          const type = "document";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type
+          };
+          nodes.push(newNode);
+        } else if (row.religionID) {
+          const id = row.religionID;
+          const label = `${row.religionDesc}`;
+          const group = "religion";
+          const type = "religion";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type
+          };
+          nodes.push(newNode);
+        } else if (row.organizationID) {
+          const id = row.organizationID;
+          const label = `${row.organizationDesc}`;
+          const group = "organization";
+          const type = "organization";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type
+          };
+          nodes.push(newNode);
+        }
+      });
 
-      console.log("POST Request Received without CTEs");
-      res.json({ rows, edges, nodes });
-    } else {
-      console.log("Tables are not defined or empty");
+      await Promise.all(promises);
+      res.json(nodes);
+    } else if(tables && tables.length === 0) {
+      res.json([]);
     }
   } catch (error) {
     console.error("Error running query:", error);
@@ -3654,6 +3714,9 @@ router.post("/nodes-query", async (req, res) => {
   }
 });
 
+
+//edge query will find all the nodes that would be found in nodes query
+//then will proccess the edges between them
 router.post("/edges-query", async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
 
@@ -3665,7 +3728,7 @@ router.post("/edges-query", async (req, res) => {
     let sql;
     console.log(tables);
 
-    if (tables && tables.length > 1) {
+    if (tables && tables.length > 0) {
       sql = `
         SELECT *
         FROM ${tables[0]}
@@ -3675,36 +3738,82 @@ router.post("/edges-query", async (req, res) => {
       // Execute the query
       const [rows] = await promisePool.query(sql);
 
-      // Convert the data to a graph
-      const { nodes, edges } = await convertDataToGraph(rows);
-      results.push({ rows, edges, nodes });
+      // Grab all possible nodes from the query
+      const nodes = [];
+      const edges = [];
+      const promises = rows.map(async (row) => {
+        if (row.personID) {
+          const id = row.personID;
+          const label = `${row.firstName} ${row.lastName}`;
+          const group = "person";
+          const type = "person";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type
+          };
+          nodes.push(newNode);
 
-      console.log("POST Request Received with CTEs");
-      res.json({ rows, edges, nodes });
-    } else if (tables && tables.length === 1) {
-      sql = `
-        SELECT *
-        FROM ${tables[0]}
-        WHERE ${fields[0]} ${operators[0]} ${values[0]};
-      `;
+          // Also push the person's documents
+          const person2documentQuery = `
+            SELECT *
+            FROM person2document
+            WHERE personID = ${id};
+          `;
+          const [person2documentResults] = await promisePool.query(person2documentQuery);
+          console.log("here", person2documentResults);
 
-      // Execute the query
-      const [rows] = await promisePool.query(sql);
+          const documentPromises = person2documentResults.map(async (connection) => {
+            const documentID = connection.docID;
+            const documentQuery = `
+              SELECT *
+              FROM document
+              WHERE documentID = ${documentID};
+            `;
+            const [documentResults] = await promisePool.query(documentQuery);
+            const document = documentResults[0];
+            const newDocument = {
+              id: `document_${document.documentID}`,
+              label: `${document.documentID}`,
+              group: "document",
+              type: "document"
+            };
+            nodes.push(newDocument);
 
-      // Convert the data to a graph
-      const { nodes, edges } = await convertDataToGraph(rows);
-      results.push({ rows, edges, nodes });
+            const newEdge = {
+              from: `person_${id}`,
+              to: `document_${document.documentID}`,
+              type: "document"
+            };
+            edges.push(newEdge);
+          });
 
-      console.log("POST Request Received without CTEs");
-      res.json({ rows, edges, nodes });
-    } else {
-      console.log("Tables are not defined or empty");
+          await Promise.all(documentPromises);
+        } else if (row.documentID) {
+          const id = row.documentID;
+          const label = `${row.documentID}`;
+          const group = "document";
+          const type = "document"
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type
+          };
+          nodes.push(newNode);
+        }
+      }
+      );
+
+      await Promise.all(promises);
+      res.json(edges);
     }
   } catch (error) {
     console.error("Error running query:", error);
     res.status(500).send("Internal Server Error");
   }
 }
-);
+)
 
 module.exports = router;
