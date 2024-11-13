@@ -3625,6 +3625,8 @@ router.post('/nodes-query', async (req, res) => {
         }
       }
 
+      console.log("HEREEEEEEE: ", sql.toString());
+
       // Execute the query
       const [rows] = await promisePool.query(sql.toString());
 
