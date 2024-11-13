@@ -3250,7 +3250,6 @@ router.post("/knex-query", async (req, res) => {
   }
 });
 
-
 router.post("/nodes", async (req, res) => {
   const peopleQuery = `
     SELECT 
@@ -3274,8 +3273,6 @@ router.post("/nodes", async (req, res) => {
     LEFT JOIN
       keyword2document b ON a.keywordID = b.keywordID;
   `;
-
-  
 
   const religionsQuery = `
     SELECT *
@@ -3315,7 +3312,6 @@ router.post("/nodes", async (req, res) => {
     ORDER BY relationshipID;
   `;
 
-
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
@@ -3328,7 +3324,7 @@ router.post("/nodes", async (req, res) => {
       [organizationResults],
       [people2documentResults],
       [relationshipsResults],
-      [keywordsResults]
+      [keywordsResults],
     ] = await Promise.all([
       promisePool.query(peopleQuery),
       promisePool.query(documentsQuery),
@@ -3336,7 +3332,7 @@ router.post("/nodes", async (req, res) => {
       promisePool.query(organizationsQuery),
       promisePool.query(people2documentQuery),
       promisePool.query(relationshipsQuery),
-      promisePool.query(keywordsQuery)
+      promisePool.query(keywordsQuery),
     ]);
 
     const nodesMap = new Map();
@@ -3345,13 +3341,16 @@ router.post("/nodes", async (req, res) => {
     peopleResults.forEach((person) => {
       nodesMap.set(`person_${person.personID}`, {
         id: `person_${person.personID}`,
-        fullName: `${person.firstName} ${person.lastName}`.replace(/\b\w/g, (l) => l.toUpperCase()),
+        fullName: `${person.firstName} ${person.lastName}`.replace(
+          /\b\w/g,
+          (l) => l.toUpperCase()
+        ),
         documents: [],
         relations: [],
         mentions: [],
         group: "person",
         nodeType: "person",
-        ...person
+        ...person,
       });
     });
 
@@ -3363,7 +3362,7 @@ router.post("/nodes", async (req, res) => {
         group: "document",
         nodeType: "document",
         keywords: [],
-        ...document
+        ...document,
       });
     });
 
@@ -3383,7 +3382,7 @@ router.post("/nodes", async (req, res) => {
         label: religion.religionDesc,
         group: "religion",
         nodeType: "religion",
-        ...religion
+        ...religion,
       });
     });
 
@@ -3394,7 +3393,7 @@ router.post("/nodes", async (req, res) => {
         label: organization.organizationDesc,
         group: "organization",
         nodeType: "organization",
-        ...organization
+        ...organization,
       });
     });
 
@@ -3406,7 +3405,8 @@ router.post("/nodes", async (req, res) => {
       //add sender and receiver to document
       const senderID = people2documentResults.find(
         (connection) =>
-          connection.docID === documentNode.documentID && connection.roleID === 1
+          connection.docID === documentNode.documentID &&
+          connection.roleID === 1
       );
 
       const sender = peopleResults.find(
@@ -3417,7 +3417,8 @@ router.post("/nodes", async (req, res) => {
 
       const receiverID = people2documentResults.find(
         (connection) =>
-          connection.docID === documentNode.documentID && connection.roleID === 2
+          connection.docID === documentNode.documentID &&
+          connection.roleID === 2
       );
 
       const receiver = peopleResults.find(
@@ -3435,9 +3436,9 @@ router.post("/nodes", async (req, res) => {
 
       documentNode.sender = senderFullName;
       documentNode.receiver = receiverFullName;
-      
+
       if (personNode && documentNode) {
-        personNode.documents.push({document: documentNode});
+        personNode.documents.push({ document: documentNode });
       }
     });
 
@@ -3451,22 +3452,21 @@ router.post("/nodes", async (req, res) => {
           relationship: {
             ...relationship,
             person1: person1Node.fullName,
-            person2: person2Node.fullName
-          }
+            person2: person2Node.fullName,
+          },
         });
         person2Node.relations.push({
           relationship: {
             ...relationship,
             person1: person1Node.fullName,
-            person2: person2Node.fullName
-          }
+            person2: person2Node.fullName,
+          },
         });
       }
     });
 
     // Construct the nodes array after all processing is done
     const nodes = Array.from(nodesMap.values());
-    
 
     res.json(nodes);
   } catch (error) {
@@ -3474,7 +3474,6 @@ router.post("/nodes", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-
 
 router.post("/edges", async (req, res) => {
   const person2documentQuery = `
@@ -3518,9 +3517,15 @@ router.post("/edges", async (req, res) => {
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
-    const [person2documentResults] = await promisePool.query(person2documentQuery);
-    const [person2religionResults] = await promisePool.query(person2religionQuery);
-    const [person2organizationResults] = await promisePool.query(person2organizationQuery);
+    const [person2documentResults] = await promisePool.query(
+      person2documentQuery
+    );
+    const [person2religionResults] = await promisePool.query(
+      person2religionQuery
+    );
+    const [person2organizationResults] = await promisePool.query(
+      person2organizationQuery
+    );
     const [relationshipResults] = await promisePool.query(relationshipQuery);
 
     const edgesMap = new Map();
@@ -3532,7 +3537,7 @@ router.post("/edges", async (req, res) => {
         to: `document_${connection.docID}`,
         role: connection.roleID,
         type: "document",
-        ...connection
+        ...connection,
       });
     });
 
@@ -3543,7 +3548,7 @@ router.post("/edges", async (req, res) => {
         to: `religion_${connection.religionID}`,
         role: "religion",
         type: "religion",
-        ...connection
+        ...connection,
       });
     });
 
@@ -3554,7 +3559,7 @@ router.post("/edges", async (req, res) => {
         to: `organization_${connection.organizationID}`,
         role: "organization",
         type: "organization",
-        ...connection
+        ...connection,
       });
     });
 
@@ -3568,7 +3573,7 @@ router.post("/edges", async (req, res) => {
         relationship2to1Desc: relationship.relationship2to1Desc || "Unknown",
         dateStart: relationship.dateStart || "N/A",
         dateEnd: relationship.dateEnd || "N/A",
-        ...relationship
+        ...relationship,
       });
 
       const reverseKey = `person_${relationship.person2ID}-person_${relationship.person1ID}`;
@@ -3582,12 +3587,10 @@ router.post("/edges", async (req, res) => {
           relationship2to1Desc: relationship.relationship1to2Desc || "Unknown",
           dateStart: relationship.dateStart || "N/A",
           dateEnd: relationship.dateEnd || "N/A",
-          ...relationship
+          ...relationship,
         });
       }
-
     });
-
 
     const edges = Array.from(edgesMap.values());
 
@@ -3597,8 +3600,6 @@ router.post("/edges", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-
-
 
 router.post("/nodes-query", async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
@@ -3611,14 +3612,21 @@ router.post("/nodes-query", async (req, res) => {
     let sql;
 
     if (tables && tables.length > 0) {
-      sql = `
-        SELECT *
-        FROM ${tables[0]}
-        WHERE ${fields[0]} ${operators[0]} '${values[0]}';
-      `;
+      sql = knex(tables[0]).select("*");
+
+      sql = sql.where(fields[0], operators[0], values[0]);
+
+      // Apply filters for single table scenario
+      for (let i = 1; i < fields.length; i++) {
+        if (dependentFields[i - 1] === "AND") {
+          sql = sql.andWhere(fields[i], operators[i], values[i]);
+        } else {
+          sql = sql.orWhere(fields[i], operators[i], values[i]);
+        }
+      }
 
       // Execute the query
-      const [rows] = await promisePool.query(sql);
+      const [rows] = await promisePool.query(sql.toString());
 
       // Grab all possible nodes from the query
       const nodes = [];
@@ -3632,7 +3640,7 @@ router.post("/nodes-query", async (req, res) => {
             id: `${group}_${id}`,
             label,
             group,
-            type: type
+            type: type,
           };
           nodes.push(newNode);
 
@@ -3642,26 +3650,30 @@ router.post("/nodes-query", async (req, res) => {
             FROM person2document
             WHERE personID = ${id};
           `;
-          const [person2documentResults] = await promisePool.query(person2documentQuery);
+          const [person2documentResults] = await promisePool.query(
+            person2documentQuery
+          );
           console.log("here", person2documentResults);
 
-          const documentPromises = person2documentResults.map(async (connection) => {
-            const documentID = connection.docID;
-            const documentQuery = `
+          const documentPromises = person2documentResults.map(
+            async (connection) => {
+              const documentID = connection.docID;
+              const documentQuery = `
               SELECT *
               FROM document
               WHERE documentID = ${documentID};
             `;
-            const [documentResults] = await promisePool.query(documentQuery);
-            const document = documentResults[0];
-            const newDocument = {
-              id: `document_${document.documentID}`,
-              label: `${document.documentID}`,
-              group: "document",
-              type: "document"
-            };
-            nodes.push(newDocument);
-          });
+              const [documentResults] = await promisePool.query(documentQuery);
+              const document = documentResults[0];
+              const newDocument = {
+                id: `document_${document.documentID}`,
+                label: `${document.documentID}`,
+                group: "document",
+                type: "document",
+              };
+              nodes.push(newDocument);
+            }
+          );
 
           await Promise.all(documentPromises);
         } else if (row.documentID) {
@@ -3673,7 +3685,7 @@ router.post("/nodes-query", async (req, res) => {
             id: `${group}_${id}`,
             label,
             group,
-            type: type
+            type: type,
           };
           nodes.push(newNode);
         } else if (row.religionID) {
@@ -3685,7 +3697,7 @@ router.post("/nodes-query", async (req, res) => {
             id: `${group}_${id}`,
             label,
             group,
-            type: type
+            type: type,
           };
           nodes.push(newNode);
         } else if (row.organizationID) {
@@ -3697,7 +3709,7 @@ router.post("/nodes-query", async (req, res) => {
             id: `${group}_${id}`,
             label,
             group,
-            type: type
+            type: type,
           };
           nodes.push(newNode);
         }
@@ -3705,7 +3717,7 @@ router.post("/nodes-query", async (req, res) => {
 
       await Promise.all(promises);
       res.json(nodes);
-    } else if(tables && tables.length === 0) {
+    } else if (tables && tables.length === 0) {
       res.json([]);
     }
   } catch (error) {
@@ -3713,7 +3725,6 @@ router.post("/nodes-query", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-
 
 //edge query will find all the nodes that would be found in nodes query
 //then will proccess the edges between them
@@ -3725,18 +3736,24 @@ router.post("/edges-query", async (req, res) => {
     const promisePool = db.promise();
     const results = [];
 
-    let sql;
-    console.log(tables);
+    let sql2;
 
     if (tables && tables.length > 0) {
-      sql = `
-        SELECT *
-        FROM ${tables[0]}
-        WHERE ${fields[0]} ${operators[0]} ${values[0]};
-      `;
+      sql2 = knex(tables[0]).select("*");
+
+      sql2 = sql2.where(fields[0], operators[0], values[0]);
+
+      // Apply filters for single table scenario
+      for (let i = 1; i < fields.length; i++) {
+        if (dependentFields[i - 1] === "AND") {
+          sql2 = sql2.andWhere(fields[i], operators[i], values[i]);
+        } else {
+          sql2 = sql2.orWhere(fields[i], operators[i], values[i]);
+        }
+      }
 
       // Execute the query
-      const [rows] = await promisePool.query(sql);
+      const [rows] = await promisePool.query(sql2.toString());
 
       // Grab all possible nodes from the query
       const nodes = [];
@@ -3751,7 +3768,7 @@ router.post("/edges-query", async (req, res) => {
             id: `${group}_${id}`,
             label,
             group,
-            type: type
+            type: type,
           };
           nodes.push(newNode);
 
@@ -3761,50 +3778,53 @@ router.post("/edges-query", async (req, res) => {
             FROM person2document
             WHERE personID = ${id};
           `;
-          const [person2documentResults] = await promisePool.query(person2documentQuery);
+          const [person2documentResults] = await promisePool.query(
+            person2documentQuery
+          );
           console.log("here", person2documentResults);
 
-          const documentPromises = person2documentResults.map(async (connection) => {
-            const documentID = connection.docID;
-            const documentQuery = `
+          const documentPromises = person2documentResults.map(
+            async (connection) => {
+              const documentID = connection.docID;
+              const documentQuery = `
               SELECT *
               FROM document
               WHERE documentID = ${documentID};
             `;
-            const [documentResults] = await promisePool.query(documentQuery);
-            const document = documentResults[0];
-            const newDocument = {
-              id: `document_${document.documentID}`,
-              label: `${document.documentID}`,
-              group: "document",
-              type: "document"
-            };
-            nodes.push(newDocument);
+              const [documentResults] = await promisePool.query(documentQuery);
+              const document = documentResults[0];
+              const newDocument = {
+                id: `document_${document.documentID}`,
+                label: `${document.documentID}`,
+                group: "document",
+                type: "document",
+              };
+              nodes.push(newDocument);
 
-            const newEdge = {
-              from: `person_${id}`,
-              to: `document_${document.documentID}`,
-              type: "document"
-            };
-            edges.push(newEdge);
-          });
+              const newEdge = {
+                from: `person_${id}`,
+                to: `document_${document.documentID}`,
+                type: "document",
+              };
+              edges.push(newEdge);
+            }
+          );
 
           await Promise.all(documentPromises);
         } else if (row.documentID) {
           const id = row.documentID;
           const label = `${row.documentID}`;
           const group = "document";
-          const type = "document"
+          const type = "document";
           const newNode = {
             id: `${group}_${id}`,
             label,
             group,
-            type: type
+            type: type,
           };
           nodes.push(newNode);
         }
-      }
-      );
+      });
 
       await Promise.all(promises);
       res.json(edges);
@@ -3813,7 +3833,6 @@ router.post("/edges-query", async (req, res) => {
     console.error("Error running query:", error);
     res.status(500).send("Internal Server Error");
   }
-}
-)
+});
 
 module.exports = router;
