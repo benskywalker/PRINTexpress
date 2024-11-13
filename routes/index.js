@@ -3601,7 +3601,7 @@ router.post("/edges", async (req, res) => {
   }
 });
 
-router.post("/nodes-query", async (req, res) => {
+router.post('/nodes-query', async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
 
   try {
@@ -3612,13 +3612,13 @@ router.post("/nodes-query", async (req, res) => {
     let sql;
 
     if (tables && tables.length > 0) {
-      sql = knex(tables[0]).select("*");
+      sql = knex(tables[0]).select('*');
 
       sql = sql.where(fields[0], operators[0], values[0]);
 
       // Apply filters for single table scenario
       for (let i = 1; i < fields.length; i++) {
-        if (dependentFields[i - 1] === "AND") {
+        if (dependentFields[i - 1] === 'AND') {
           sql = sql.andWhere(fields[i], operators[i], values[i]);
         } else {
           sql = sql.orWhere(fields[i], operators[i], values[i]);
@@ -3628,103 +3628,357 @@ router.post("/nodes-query", async (req, res) => {
       // Execute the query
       const [rows] = await promisePool.query(sql.toString());
 
-      // Grab all possible nodes from the query
-      const nodes = [];
-      const promises = rows.map(async (row) => {
+      // Initialize maps to prevent duplicate nodes
+      const nodesMap = new Map();
+      const edges = [];
+
+      // Helper function to generate unique IDs
+      const generateUniqueId = (type, id) => `${type}_${id}`;
+
+      // Process each row to create nodes
+      for (const row of rows) {
         if (row.personID) {
-          const id = row.personID;
-          const label = `${row.firstName} ${row.lastName}`;
-          const group = "person";
-          const type = "person";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
+          // Process Person Node
+          const personId = row.personID;
+          const uniqueId = generateUniqueId('person', personId);
 
-          // Also push the person's documents
+          if (!nodesMap.has(uniqueId)) {
+            const fullName = `${row.firstName} ${row.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
+
+            nodesMap.set(uniqueId, {
+              id: uniqueId,
+              label: fullName,
+              group: 'person',
+              nodeType: 'person',
+              fullName: fullName,
+              documents: [],
+              relations: [],
+              mentions: [],
+              ...row
+            });
+          }
+
+          // Fetch and process documents related to the person
           const person2documentQuery = `
-            SELECT *
-            FROM person2document
-            WHERE personID = ${id};
+            SELECT p2d.*, d.*, 
+                   sender.firstName AS senderFirstName, sender.lastName AS senderLastName,
+                   receiver.firstName AS receiverFirstName, receiver.lastName AS receiverLastName
+            FROM person2document p2d
+            JOIN document d ON p2d.docID = d.documentID
+            LEFT JOIN person sender ON p2d.personID = sender.personID AND p2d.roleID = 1
+            LEFT JOIN person receiver ON p2d.personID = receiver.personID AND p2d.roleID = 2
+            WHERE p2d.personID = ${personId};
           `;
-          const [person2documentResults] = await promisePool.query(
-            person2documentQuery
-          );
-          console.log("here", person2documentResults);
+          const [person2documentResults] = await promisePool.query(person2documentQuery);
 
-          const documentPromises = person2documentResults.map(
-            async (connection) => {
-              const documentID = connection.docID;
-              const documentQuery = `
-              SELECT *
-              FROM document
-              WHERE documentID = ${documentID};
-            `;
-              const [documentResults] = await promisePool.query(documentQuery);
-              const document = documentResults[0];
-              const newDocument = {
-                id: `document_${document.documentID}`,
-                label: `${document.documentID}`,
-                group: "document",
-                type: "document",
-              };
-              nodes.push(newDocument);
+          for (const connection of person2documentResults) {
+            const documentId = connection.documentID;
+            const documentUniqueId = generateUniqueId('document', documentId);
+
+            // Create Document Node if not exists
+            if (!nodesMap.has(documentUniqueId)) {
+              const sender = connection.senderFirstName && connection.senderLastName
+                ? `${connection.senderFirstName} ${connection.senderLastName}`.replace(/\b\w/g, l => l.toUpperCase())
+                : null;
+              const receiver = connection.receiverFirstName && connection.receiverLastName
+                ? `${connection.receiverFirstName} ${connection.receiverLastName}`.replace(/\b\w/g, l => l.toUpperCase())
+                : null;
+
+              nodesMap.set(documentUniqueId, {
+                id: documentUniqueId,
+                label: `Document ${documentId}`,
+                group: 'document',
+                nodeType: 'document',
+                sender: sender,
+                receiver: receiver,
+                ...connection
+              });
             }
-          );
 
-          await Promise.all(documentPromises);
+            // Create Edge between Person and Document
+            edges.push({
+              from: uniqueId,
+              to: documentUniqueId,
+              type: 'document',
+              role: connection.roleID, // You might want to map roleID to role names
+            });
+
+            // Update Person's Documents Array
+            const personNode = nodesMap.get(uniqueId);
+            personNode.documents.push({
+              document: nodesMap.get(documentUniqueId),
+              role: connection.roleID, // Optionally map to role names
+            });
+          }
+
+          // Fetch and process relationships related to the person
+          const relationshipQuery = `
+            SELECT 
+              r.relationshipID,
+              r.person1ID,
+              r.person2ID,
+              COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+              COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+              r.dateStart,
+              r.dateEnd,
+              r.uncertain,
+              r.dateEndCause,
+              r.relationship1to2ID,
+              r.relationship2to1ID
+            FROM relationship r
+            LEFT JOIN relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+            LEFT JOIN relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+            WHERE r.person1ID = ${personId} OR r.person2ID = ${personId}
+            ORDER BY r.relationshipID;
+          `;
+          const [relationshipResults] = await promisePool.query(relationshipQuery);
+
+          for (const relationship of relationshipResults) {
+            const fromId = generateUniqueId('person', relationship.person1ID);
+            const toId = generateUniqueId('person', relationship.person2ID);
+
+            // Ensure both person nodes exist
+            if (!nodesMap.has(fromId)) {
+              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${relationship.person1ID}`);
+              if (person[0].length > 0) {
+                const p = person[0][0];
+                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
+                nodesMap.set(fromId, {
+                  id: fromId,
+                  label: fullName,
+                  group: 'person',
+                  nodeType: 'person',
+                  fullName: fullName,
+                  documents: [],
+                  relations: [],
+                  mentions: [],
+                  ...p
+                });
+              }
+            }
+
+            if (!nodesMap.has(toId)) {
+              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${relationship.person2ID}`);
+              if (person[0].length > 0) {
+                const p = person[0][0];
+                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
+                nodesMap.set(toId, {
+                  id: toId,
+                  label: fullName,
+                  group: 'person',
+                  nodeType: 'person',
+                  fullName: fullName,
+                  documents: [],
+                  relations: [],
+                  mentions: [],
+                  ...p
+                });
+              }
+            }
+
+            // Create Relationship Edge
+            edges.push({
+              from: fromId,
+              to: toId,
+              type: 'relationship',
+              relationship1to2Desc: relationship.relationship1to2Desc,
+              relationship2to1Desc: relationship.relationship2to1Desc,
+              dateStart: relationship.dateStart,
+              dateEnd: relationship.dateEnd,
+              uncertain: relationship.uncertain,
+              dateEndCause: relationship.dateEndCause,
+            });
+
+            // Update Relations Array for Both Persons
+            const fromNode = nodesMap.get(fromId);
+            const toNode = nodesMap.get(toId);
+
+            if (fromNode) {
+              fromNode.relations.push({
+                relationship: {
+                  ...relationship,
+                  person1: fromNode.fullName,
+                  person2: toNode ? toNode.fullName : 'Unknown',
+                }
+              });
+            }
+
+            if (toNode) {
+              toNode.relations.push({
+                relationship: {
+                  ...relationship,
+                  person1: fromNode ? fromNode.fullName : 'Unknown',
+                  person2: toNode.fullName,
+                }
+              });
+            }
+          }
+
         } else if (row.documentID) {
-          const id = row.documentID;
-          const label = `${row.documentID}`;
-          const group = "document";
-          const type = "document";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
-        } else if (row.religionID) {
-          const id = row.religionID;
-          const label = `${row.religionDesc}`;
-          const group = "religion";
-          const type = "religion";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
-        } else if (row.organizationID) {
-          const id = row.organizationID;
-          const label = `${row.organizationDesc}`;
-          const group = "organization";
-          const type = "organization";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
-        }
-      });
+          // Process Document Node (if needed)
+          const documentId = row.documentID;
+          const uniqueId = generateUniqueId('document', documentId);
 
-      await Promise.all(promises);
+          if (!nodesMap.has(uniqueId)) {
+            nodesMap.set(uniqueId, {
+              id: uniqueId,
+              label: `Document ${documentId}`,
+              group: 'document',
+              nodeType: 'document',
+              ...row
+            });
+          }
+
+        } else if (row.religionID) {
+          // Process Religion Node
+          const religionId = row.religionID;
+          const uniqueId = generateUniqueId('religion', religionId);
+
+          if (!nodesMap.has(uniqueId)) {
+            nodesMap.set(uniqueId, {
+              id: uniqueId,
+              label: row.religionDesc,
+              group: 'religion',
+              nodeType: 'religion',
+              ...row
+            });
+          }
+
+          // Fetch and process people associated with this religion
+          const person2religionQuery = `
+            SELECT *
+            FROM person2religion
+            WHERE religionID = ${religionId};
+          `;
+          const [person2religionResults] = await promisePool.query(person2religionQuery);
+
+          for (const connection of person2religionResults) {
+            const personId = connection.personID;
+            const personUniqueId = generateUniqueId('person', personId);
+
+            // Create Person Node if not exists
+            if (!nodesMap.has(personUniqueId)) {
+              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${personId}`);
+              if (person[0].length > 0) {
+                const p = person[0][0];
+                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
+
+                nodesMap.set(personUniqueId, {
+                  id: personUniqueId,
+                  label: fullName,
+                  group: 'person',
+                  nodeType: 'person',
+                  fullName: fullName,
+                  documents: [],
+                  relations: [],
+                  mentions: [],
+                  ...p
+                });
+              }
+            }
+
+            // Create Edge between Person and Religion
+            edges.push({
+              from: personUniqueId,
+              to: uniqueId,
+              type: 'religion',
+            });
+
+            // Update Person's Relations Array
+            const personNode = nodesMap.get(personUniqueId);
+            if (personNode) {
+              personNode.relations.push({
+                relationship: {
+                  type: 'religion',
+                  relatedTo: row.religionDesc,
+                }
+              });
+            }
+          }
+
+        } else if (row.organizationID) {
+          // Process Organization Node
+          const organizationId = row.organizationID;
+          const uniqueId = generateUniqueId('organization', organizationId);
+
+          if (!nodesMap.has(uniqueId)) {
+            nodesMap.set(uniqueId, {
+              id: uniqueId,
+              label: row.organizationDesc,
+              group: 'organization',
+              nodeType: 'organization',
+              ...row
+            });
+          }
+
+          // Fetch and process people associated with this organization
+          const person2organizationQuery = `
+            SELECT *
+            FROM person2organization
+            WHERE organizationID = ${organizationId};
+          `;
+          const [person2organizationResults] = await promisePool.query(person2organizationQuery);
+
+          for (const connection of person2organizationResults) {
+            const personId = connection.personID;
+            const personUniqueId = generateUniqueId('person', personId);
+
+            // Create Person Node if not exists
+            if (!nodesMap.has(personUniqueId)) {
+              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${personId}`);
+              if (person[0].length > 0) {
+                const p = person[0][0];
+                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
+
+                nodesMap.set(personUniqueId, {
+                  id: personUniqueId,
+                  label: fullName,
+                  group: 'person',
+                  nodeType: 'person',
+                  fullName: fullName,
+                  documents: [],
+                  relations: [],
+                  mentions: [],
+                  ...p
+                });
+              }
+            }
+
+            // Create Edge between Person and Organization
+            edges.push({
+              from: personUniqueId,
+              to: uniqueId,
+              type: 'organization',
+            });
+
+            // Update Person's Relations Array
+            const personNode = nodesMap.get(personUniqueId);
+            if (personNode) {
+              personNode.relations.push({
+                relationship: {
+                  type: 'organization',
+                  relatedTo: row.organizationDesc,
+                }
+              });
+            }
+          }
+
+        }
+      }
+
+      // Convert nodesMap to nodes array
+      const nodes = Array.from(nodesMap.values());
+
       res.json(nodes);
     } else if (tables && tables.length === 0) {
       res.json([]);
     }
   } catch (error) {
-    console.error("Error running query:", error);
-    res.status(500).send("Internal Server Error");
+    console.error('Error running query:', error);
+    res.status(500).send('Internal Server Error');
   }
 });
+
 
 //edge query will find all the nodes that would be found in nodes query
 //then will proccess the edges between them
@@ -3765,10 +4019,10 @@ router.post("/edges-query", async (req, res) => {
           const group = "person";
           const type = "person";
           const newNode = {
-            id: `${group}_${id}`,
+            id: `person_${id}`,
             label,
             group,
-            type: type,
+            nodeType: "person",
           };
           nodes.push(newNode);
 
@@ -3778,39 +4032,70 @@ router.post("/edges-query", async (req, res) => {
             FROM person2document
             WHERE personID = ${id};
           `;
-          const [person2documentResults] = await promisePool.query(
-            person2documentQuery
-          );
-          console.log("here", person2documentResults);
+          const [person2documentResults] = await promisePool.query(person2documentQuery);
 
-          const documentPromises = person2documentResults.map(
-            async (connection) => {
-              const documentID = connection.docID;
-              const documentQuery = `
+          const documentPromises = person2documentResults.map(async (connection) => {
+            const documentID = connection.docID;
+            const documentQuery = `
               SELECT *
               FROM document
               WHERE documentID = ${documentID};
             `;
-              const [documentResults] = await promisePool.query(documentQuery);
-              const document = documentResults[0];
-              const newDocument = {
-                id: `document_${document.documentID}`,
-                label: `${document.documentID}`,
-                group: "document",
-                type: "document",
-              };
-              nodes.push(newDocument);
+            const [documentResults] = await promisePool.query(documentQuery);
+            const document = documentResults[0];
+            const newDocument = {
+              id: `document_${document.documentID}`,
+              label: `${document.documentID}`,
+              group: "document",
+              type: "document",
+            };
+            nodes.push(newDocument);
 
-              const newEdge = {
-                from: `person_${id}`,
-                to: `document_${document.documentID}`,
-                type: "document",
-              };
-              edges.push(newEdge);
-            }
-          );
+            const newEdge = {
+              from: `person_${id}`,
+              to: `document_${document.documentID}`,
+              type: "document",
+            };
+            edges.push(newEdge);
+          });
 
           await Promise.all(documentPromises);
+
+          // Add relationship edges
+          const relationshipQuery = `
+            SELECT 
+              r.relationshipID,
+              r.person1ID,
+              r.person2ID,
+              COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+              COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+              r.dateStart,
+              r.dateEnd,
+              r.uncertain,
+              r.dateEndCause,
+              r.relationship1to2ID,
+              r.relationship2to1ID
+            FROM
+              relationship r
+            LEFT JOIN
+              relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+            LEFT JOIN
+              relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+            WHERE person1ID = ${id} OR person2ID = ${id}
+            ORDER BY relationshipID;
+          `;
+          const [relationshipResults] = await promisePool.query(relationshipQuery);
+
+          relationshipResults.forEach((relationship) => {
+            
+            const newEdge = {
+              from: `person_${relationship.person1ID}`,
+              to: `person_${relationship.person2ID}`,
+              type: "relationship",
+            };
+            edges.push(newEdge);
+          });
+
         } else if (row.documentID) {
           const id = row.documentID;
           const label = `${row.documentID}`;
@@ -3823,16 +4108,179 @@ router.post("/edges-query", async (req, res) => {
             type: type,
           };
           nodes.push(newNode);
+        } else if (row.religionID) {
+          const id = row.religionID;
+          const label = `${row.religionDesc}`;
+          const group = "religion";
+          const type = "religion";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type,
+          };
+          nodes.push(newNode);
+
+          // Get all people with this religion
+          const person2religionQuery = `
+            SELECT *
+            FROM person2religion
+            WHERE religionID = ${id};
+          `;
+          const [person2religionResults] = await promisePool.query(person2religionQuery);
+
+          const personPromises = person2religionResults.map(async (connection) => {
+            const personID = connection.personID;
+            const personQuery = `
+              SELECT *
+              FROM person
+              WHERE personID = ${personID};
+            `;
+            const [personResults] = await promisePool.query(personQuery);
+            const person = personResults[0];
+            const newPerson = {
+              id: `person_${person.personID}`,
+              label: `${person.firstName} ${person.lastName}`,
+              group: "person",
+              type: "person",
+            };
+            nodes.push(newPerson);
+
+            const newEdge = {
+              from: `person_${person.personID}`,
+              to: `religion_${id}`,
+              type: "religion",
+            };
+            edges.push(newEdge);
+
+            // Also push the person's documents
+            const person2documentQuery = `
+              SELECT *
+              FROM person2document
+              WHERE personID = ${personID};
+            `;
+            const [person2documentResults] = await promisePool.query(person2documentQuery);
+
+            const documentPromises = person2documentResults.map(async (connection) => {
+              const documentID = connection.docID;
+              const documentQuery = `
+                SELECT *
+                FROM document
+                WHERE documentID = ${documentID};
+              `;
+              const [documentResults] = await promisePool.query(documentQuery);
+              const document = documentResults[0];
+              const newDocument = {
+                id: `document_${document.documentID}`,
+                label: `${document.documentID}`,
+                group: "document",
+                type: "document",
+              };
+              nodes.push(newDocument);
+
+              const newEdge = {
+                from: `person_${personID}`,
+                to: `document_${document.documentID}`,
+                type: "document",
+              };
+              edges.push(newEdge);
+            });
+
+            await Promise.all(documentPromises);
+          });
+
+          await Promise.all(personPromises);
+        } else if (row.organizationID) {
+          const id = row.organizationID;
+          const label = `${row.organizationDesc}`;
+          const group = "organization";
+          const type = "organization";
+          const newNode = {
+            id: `${group}_${id}`,
+            label,
+            group,
+            type: type,
+          };
+          nodes.push(newNode);
+
+          // Get all people with this organization
+          const person2organizationQuery = `
+            SELECT *
+            FROM person2organization
+            WHERE organizationID = ${id};
+          `;
+          const [person2organizationResults] = await promisePool.query(person2organizationQuery);
+
+          const personPromises = person2organizationResults.map(async (connection) => {
+            const personID = connection.personID;
+            const personQuery = `
+              SELECT *
+              FROM person
+              WHERE personID = ${personID};
+            `;
+            const [personResults] = await promisePool.query(personQuery);
+            const person = personResults[0];
+            const newPerson = {
+              id: `person_${person.personID}`,
+              label: `${person.firstName} ${person.lastName}`,
+              group: "person",
+              type: "person",
+            };
+            nodes.push(newPerson);
+
+            const newEdge = {
+              from: `person_${person.personID}`,
+              to: `organization_${id}`,
+              type: "organization",
+            };
+            edges.push(newEdge);
+
+            // Also push the person's documents
+            const person2documentQuery = `
+              SELECT *
+              FROM person2document
+              WHERE personID = ${personID};
+            `;
+            const [person2documentResults] = await promisePool.query(person2documentQuery);
+
+            const documentPromises = person2documentResults.map(async (connection) => {
+              const documentID = connection.docID;
+              const documentQuery = `
+                SELECT *
+                FROM document
+                WHERE documentID = ${documentID};
+              `;
+              const [documentResults] = await promisePool.query(documentQuery);
+              const document = documentResults[0];
+              const newDocument = {
+                id: `document_${document.documentID}`,
+                label: `${document.documentID}`,
+                group: "document",
+                type: "document",
+              };
+              nodes.push(newDocument);
+
+              const newEdge = {
+                from: `person_${personID}`,
+                to: `document_${document.documentID}`,
+                type: "document",
+              };
+              edges.push(newEdge);
+            });
+
+            await Promise.all(documentPromises);
+          });
+
+          await Promise.all(personPromises);
         }
       });
 
       await Promise.all(promises);
-      res.json(edges);
+      res.json({ nodes, edges });
     }
   } catch (error) {
     console.error("Error running query:", error);
     res.status(500).send("Internal Server Error");
   }
 });
-
 module.exports = router;
