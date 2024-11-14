@@ -3335,9 +3335,11 @@ router.post('/nodes-query', async (req, res) => {
     const nodesMap = new Map();
     const personIDs = new Set();
     const documentIDs = new Set();
+    const organizationIDs = new Set();
+    const religionIDs = new Set();
 
     // Process initial nodes and collect IDs
-    rows.forEach((row) => {
+    for (const row of rows) {
       if (tables[0] === 'person') {
         const nodeId = `person_${row.personID}`;
         nodesMap.set(nodeId, {
@@ -3364,9 +3366,29 @@ router.post('/nodes-query', async (req, res) => {
           ...row,
         });
         documentIDs.add(row.documentID);
+      } else if (tables[0] === 'organization') {
+        const nodeId = `organization_${row.organizationID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: row.organizationDesc,
+          group: 'organization',
+          nodeType: 'organization',
+          ...row,
+        });
+        organizationIDs.add(row.organizationID);
+      } else if (tables[0] === 'religion') {
+        const nodeId = `religion_${row.religionID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: row.religionDesc,
+          group: 'religion',
+          nodeType: 'religion',
+          ...row,
+        });
+        religionIDs.add(row.religionID);
       }
       // Add more cases for other tables if needed
-    });
+    }
 
     // **Fetch associated documents for each person**
     if (personIDs.size > 0) {
@@ -3389,7 +3411,6 @@ router.post('/nodes-query', async (req, res) => {
       });
 
       // Fetch documents
-      let documentResults = [];
       if (documentIDs.size > 0) {
         const documentIDsArray = Array.from(documentIDs);
 
@@ -3400,7 +3421,7 @@ router.post('/nodes-query', async (req, res) => {
           AND b.fileTypeID = 2
           WHERE a.documentID IN (?)
         `;
-        [documentResults] = await promisePool.query(documentsQuery, [documentIDsArray]);
+        const [documentResults] = await promisePool.query(documentsQuery, [documentIDsArray]);
 
         documentResults.forEach((document) => {
           const nodeId = `document_${document.documentID}`;
@@ -3431,9 +3452,10 @@ router.post('/nodes-query', async (req, res) => {
       if (documentIDs.size > 0) {
         const people2documentResults = person2documentResults;
 
-        documentResults.forEach((documentData) => {
-          const documentNode = nodesMap.get(`document_${documentData.documentID}`);
-          if (documentNode) {
+        for (const documentData of nodesMap.values()) {
+          if (documentData.nodeType === 'document') {
+            const documentNode = documentData;
+
             // Add sender and receiver information
             const senderConnection = people2documentResults.find(
               (connection) =>
@@ -3455,7 +3477,7 @@ router.post('/nodes-query', async (req, res) => {
             documentNode.sender = senderFullName;
             documentNode.receiver = receiverFullName;
           }
-        });
+        }
       }
     }
 
@@ -3491,12 +3513,10 @@ router.post('/nodes-query', async (req, res) => {
         [personIDsArray, personIDsArray]
       );
 
-      relationshipsResults.forEach((relationship) => {
-        const person1Node = nodesMap.get(`person_${relationship.person1ID}`);
-        const person2Node = nodesMap.get(`person_${relationship.person2ID}`);
-
+      for (const relationship of relationshipsResults) {
         // **Add the other person as a node if not already added**
-        [relationship.person1ID, relationship.person2ID].forEach(async (personID) => {
+        const relatedPersonIDs = [relationship.person1ID, relationship.person2ID];
+        for (const personID of relatedPersonIDs) {
           const nodeId = `person_${personID}`;
           if (!nodesMap.has(nodeId)) {
             const personQuery = `
@@ -3522,7 +3542,7 @@ router.post('/nodes-query', async (req, res) => {
               personIDs.add(personID);
             }
           }
-        });
+        }
 
         // Update person nodes
         const updatedPerson1Node = nodesMap.get(`person_${relationship.person1ID}`);
@@ -3544,7 +3564,7 @@ router.post('/nodes-query', async (req, res) => {
             },
           });
         }
-      });
+      }
     }
 
     // **Fetch keywords and add them to documents**
@@ -3572,9 +3592,174 @@ router.post('/nodes-query', async (req, res) => {
       });
     }
 
-    // **Process person2religion and person2organization if needed**
-    // Add similar blocks here if you want to include religions and organizations
+    // **Process person2organization**
+    if (organizationIDs.size > 0 || personIDs.size > 0) {
+      const organizationIDsArray = Array.from(organizationIDs);
+      const personIDsArray = Array.from(personIDs);
 
+      const whereClauses = [];
+      const params = [];
+
+      if (organizationIDsArray.length > 0) {
+        whereClauses.push('organizationID IN (?)');
+        params.push(organizationIDsArray);
+      }
+
+      if (personIDsArray.length > 0) {
+        whereClauses.push('personID IN (?)');
+        params.push(personIDsArray);
+      }
+
+      if (whereClauses.length > 0) {
+        const person2organizationQuery = `
+          SELECT *
+          FROM person2organization
+          WHERE ${whereClauses.join(' OR ')}
+        `;
+        const [person2organizationResults] = await promisePool.query(
+          person2organizationQuery,
+          params
+        );
+
+        for (const p2o of person2organizationResults) {
+          // Add person node if not already added
+          const personNodeId = `person_${p2o.personID}`;
+          if (!nodesMap.has(personNodeId)) {
+            const personQuery = `
+              SELECT *
+              FROM person
+              WHERE personID = ?
+            `;
+            const [personRows] = await promisePool.query(personQuery, [p2o.personID]);
+            const personData = personRows[0];
+            if (personData) {
+              nodesMap.set(personNodeId, {
+                id: personNodeId,
+                fullName: `${personData.firstName} ${personData.lastName}`.replace(/\b\w/g, (l) =>
+                  l.toUpperCase()
+                ),
+                documents: [],
+                relations: [],
+                mentions: [],
+                group: 'person',
+                nodeType: 'person',
+                ...personData,
+              });
+              personIDs.add(p2o.personID);
+            }
+          }
+
+          // Add organization node if not already added
+          const organizationNodeId = `organization_${p2o.organizationID}`;
+          if (!nodesMap.has(organizationNodeId)) {
+            const organizationQuery = `
+              SELECT *
+              FROM organization
+              WHERE organizationID = ?
+            `;
+            const [organizationRows] = await promisePool.query(organizationQuery, [p2o.organizationID]);
+            const organizationData = organizationRows[0];
+            if (organizationData) {
+              nodesMap.set(organizationNodeId, {
+                id: organizationNodeId,
+                label: organizationData.organizationDesc,
+                group: 'organization',
+                nodeType: 'organization',
+                ...organizationData,
+              });
+              organizationIDs.add(p2o.organizationID);
+            }
+          }
+        }
+      }
+    }
+
+    // **Process person2religion**
+    if (religionIDs.size > 0 || personIDs.size > 0) {
+      const religionIDsArray = Array.from(religionIDs);
+      const personIDsArray = Array.from(personIDs);
+
+      const whereClauses = [];
+      const params = [];
+
+      if (religionIDsArray.length > 0) {
+        whereClauses.push('religionID IN (?)');
+        params.push(religionIDsArray);
+      }
+
+      if (personIDsArray.length > 0) {
+        whereClauses.push('personID IN (?)');
+        params.push(personIDsArray);
+      }
+
+      if (whereClauses.length > 0) {
+        const person2religionQuery = `
+          SELECT *
+          FROM person2religion
+          WHERE ${whereClauses.join(' OR ')}
+        `;
+        const [person2religionResults] = await promisePool.query(
+          person2religionQuery,
+          params
+        );
+
+        for (const p2r of person2religionResults) {
+          // Add person node if not already added
+          const personNodeId = `person_${p2r.personID}`;
+          if (!nodesMap.has(personNodeId)) {
+            const personQuery = `
+              SELECT *
+              FROM person
+              WHERE personID = ?
+            `;
+            const [personRows] = await promisePool.query(personQuery, [p2r.personID]);
+            const personData = personRows[0];
+            if (personData) {
+              nodesMap.set(personNodeId, {
+                id: personNodeId,
+                fullName: `${personData.firstName} ${personData.lastName}`.replace(/\b\w/g, (l) =>
+                  l.toUpperCase()
+                ),
+                documents: [],
+                relations: [],
+                mentions: [],
+                group: 'person',
+                nodeType: 'person',
+                ...personData,
+              });
+              personIDs.add(p2r.personID);
+            }
+          }
+
+          // Add religion node if not already added
+          const religionNodeId = `religion_${p2r.religionID}`;
+          if (!nodesMap.has(religionNodeId)) {
+            const religionQuery = `
+              SELECT *
+              FROM religion
+              WHERE religionID = ?
+            `;
+            const [religionRows] = await promisePool.query(religionQuery, [p2r.religionID]);
+            const religionData = religionRows[0];
+            if (religionData) {
+              nodesMap.set(religionNodeId, {
+                id: religionNodeId,
+                label: religionData.religionDesc,
+                group: 'religion',
+                nodeType: 'religion',
+                ...religionData,
+              });
+              religionIDs.add(p2r.religionID);
+            }
+          }
+        }
+      }
+    }
+
+    // **Fetch associated documents for newly added persons**
+    // (You may need to re-fetch documents if new persons were added)
+
+    // **Finalize nodes array**
     const nodes = Array.from(nodesMap.values());
 
     res.json(nodes);
@@ -3586,7 +3771,8 @@ router.post('/nodes-query', async (req, res) => {
 
 
 
-// POST /edges-query
+
+
 router.post('/edges-query', async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
 
@@ -3622,8 +3808,11 @@ router.post('/edges-query', async (req, res) => {
     const nodesMap = new Map();
     const personIDs = new Set();
     const documentIDs = new Set();
+    const organizationIDs = new Set();
+    const religionIDs = new Set();
 
-    rows.forEach((row) => {
+    // Process initial nodes and collect IDs
+    for (const row of rows) {
       if (tables[0] === 'person') {
         const nodeId = `person_${row.personID}`;
         nodesMap.set(nodeId, {
@@ -3631,9 +3820,6 @@ router.post('/edges-query', async (req, res) => {
           fullName: `${row.firstName} ${row.lastName}`.replace(/\b\w/g, (l) =>
             l.toUpperCase()
           ),
-          documents: [],
-          relations: [],
-          mentions: [],
           group: 'person',
           nodeType: 'person',
           ...row,
@@ -3646,15 +3832,34 @@ router.post('/edges-query', async (req, res) => {
           label: `${row.importID}`,
           group: 'document',
           nodeType: 'document',
-          keywords: [],
           ...row,
         });
         documentIDs.add(row.documentID);
+      } else if (tables[0] === 'organization') {
+        const nodeId = `organization_${row.organizationID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: row.organizationDesc,
+          group: 'organization',
+          nodeType: 'organization',
+          ...row,
+        });
+        organizationIDs.add(row.organizationID);
+      } else if (tables[0] === 'religion') {
+        const nodeId = `religion_${row.religionID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: row.religionDesc,
+          group: 'religion',
+          nodeType: 'religion',
+          ...row,
+        });
+        religionIDs.add(row.religionID);
       }
       // Add more cases for other tables if needed
-    });
+    }
 
-    // **Fetch associated documents for each person (same as in /nodes-query)**
+    // **Fetch associated documents for each person**
     if (personIDs.size > 0) {
       const personIDsArray = Array.from(personIDs);
 
@@ -3672,6 +3877,218 @@ router.post('/edges-query', async (req, res) => {
       // Collect document IDs
       person2documentResults.forEach((p2d) => {
         documentIDs.add(p2d.docID);
+      });
+
+      // Fetch documents
+      if (documentIDs.size > 0) {
+        const documentIDsArray = Array.from(documentIDs);
+
+        const documentsQuery = `
+          SELECT a.*, b.internalPDFname, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
+          FROM document a
+          LEFT JOIN pdf_documents b ON a.documentID = b.documentID
+          AND b.fileTypeID = 2
+          WHERE a.documentID IN (?)
+        `;
+        const [documentResults] = await promisePool.query(documentsQuery, [documentIDsArray]);
+
+        documentResults.forEach((document) => {
+          const nodeId = `document_${document.documentID}`;
+          if (!nodesMap.has(nodeId)) {
+            nodesMap.set(nodeId, {
+              id: nodeId,
+              label: `${document.importID}`,
+              group: 'document',
+              nodeType: 'document',
+              ...document,
+            });
+          }
+        });
+      }
+    }
+
+    // **Fetch person2organization associations**
+    if (personIDs.size > 0 || organizationIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+      const organizationIDsArray = Array.from(organizationIDs);
+
+      const whereClauses = [];
+      const params = [];
+
+      if (personIDsArray.length > 0) {
+        whereClauses.push('personID IN (?)');
+        params.push(personIDsArray);
+      }
+
+      if (organizationIDsArray.length > 0) {
+        whereClauses.push('organizationID IN (?)');
+        params.push(organizationIDsArray);
+      }
+
+      if (whereClauses.length > 0) {
+        const person2organizationQuery = `
+          SELECT *
+          FROM person2organization
+          WHERE ${whereClauses.join(' OR ')}
+        `;
+        const [person2organizationResults] = await promisePool.query(
+          person2organizationQuery,
+          params
+        );
+
+        person2organizationResults.forEach((p2o) => {
+          // Collect IDs
+          personIDs.add(p2o.personID);
+          organizationIDs.add(p2o.organizationID);
+        });
+      }
+    }
+
+    // **Fetch person2religion associations**
+    if (personIDs.size > 0 || religionIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+      const religionIDsArray = Array.from(religionIDs);
+
+      const whereClauses = [];
+      const params = [];
+
+      if (personIDsArray.length > 0) {
+        whereClauses.push('personID IN (?)');
+        params.push(personIDsArray);
+      }
+
+      if (religionIDsArray.length > 0) {
+        whereClauses.push('religionID IN (?)');
+        params.push(religionIDsArray);
+      }
+
+      if (whereClauses.length > 0) {
+        const person2religionQuery = `
+          SELECT *
+          FROM person2religion
+          WHERE ${whereClauses.join(' OR ')}
+        `;
+        const [person2religionResults] = await promisePool.query(
+          person2religionQuery,
+          params
+        );
+
+        person2religionResults.forEach((p2r) => {
+          // Collect IDs
+          personIDs.add(p2r.personID);
+          religionIDs.add(p2r.religionID);
+        });
+      }
+    }
+
+    // **Fetch relationships involving persons**
+    if (personIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+
+      const relationshipsQuery = `
+        SELECT
+          r.relationshipID,
+          r.person1ID,
+          r.person2ID,
+          COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+          COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+          r.dateStart,
+          r.dateEnd,
+          r.uncertain,
+          r.dateEndCause,
+          r.relationship1to2ID,
+          r.relationship2to1ID
+        FROM
+          relationship r
+        LEFT JOIN
+          relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+        LEFT JOIN
+          relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+        WHERE
+          r.person1ID IN (?) OR r.person2ID IN (?)
+        ORDER BY relationshipID;
+      `;
+      const [relationshipsResults] = await promisePool.query(
+        relationshipsQuery,
+        [personIDsArray, personIDsArray]
+      );
+
+      relationshipsResults.forEach((relationship) => {
+        personIDs.add(relationship.person1ID);
+        personIDs.add(relationship.person2ID);
+      });
+    }
+
+    // **Update nodesMap with any new persons, organizations, religions**
+    // Fetch any new persons not already in nodesMap
+    const allPersonIDs = Array.from(personIDs).filter(
+      (id) => !nodesMap.has(`person_${id}`)
+    );
+    if (allPersonIDs.length > 0) {
+      const personQuery = `
+        SELECT *
+        FROM person
+        WHERE personID IN (?)
+      `;
+      const [personRows] = await promisePool.query(personQuery, [allPersonIDs]);
+      personRows.forEach((personData) => {
+        const nodeId = `person_${personData.personID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          fullName: `${personData.firstName} ${personData.lastName}`.replace(
+            /\b\w/g,
+            (l) => l.toUpperCase()
+          ),
+          group: 'person',
+          nodeType: 'person',
+          ...personData,
+        });
+      });
+    }
+
+    // Fetch any new organizations not already in nodesMap
+    const allOrganizationIDs = Array.from(organizationIDs).filter(
+      (id) => !nodesMap.has(`organization_${id}`)
+    );
+    if (allOrganizationIDs.length > 0) {
+      const organizationQuery = `
+        SELECT *
+        FROM organization
+        WHERE organizationID IN (?)
+      `;
+      const [organizationRows] = await promisePool.query(organizationQuery, [allOrganizationIDs]);
+      organizationRows.forEach((organizationData) => {
+        const nodeId = `organization_${organizationData.organizationID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: organizationData.organizationDesc,
+          group: 'organization',
+          nodeType: 'organization',
+          ...organizationData,
+        });
+      });
+    }
+
+    // Fetch any new religions not already in nodesMap
+    const allReligionIDs = Array.from(religionIDs).filter(
+      (id) => !nodesMap.has(`religion_${id}`)
+    );
+    if (allReligionIDs.length > 0) {
+      const religionQuery = `
+        SELECT *
+        FROM religion
+        WHERE religionID IN (?)
+      `;
+      const [religionRows] = await promisePool.query(religionQuery, [allReligionIDs]);
+      religionRows.forEach((religionData) => {
+        const nodeId = `religion_${religionData.religionID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: religionData.religionDesc,
+          group: 'religion',
+          nodeType: 'religion',
+          ...religionData,
+        });
       });
     }
 
@@ -3763,7 +4180,59 @@ router.post('/edges-query', async (req, res) => {
       });
     }
 
-    // **Step 4: Return the Edges**
+    // Fetch person-to-organization edges
+    if (personIDs.size > 0 && organizationIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+      const organizationIDsArray = Array.from(organizationIDs);
+
+      const person2organizationQuery = `
+        SELECT *
+        FROM person2organization
+        WHERE personID IN (?) AND organizationID IN (?)
+      `;
+      const [person2organizationResults] = await promisePool.query(
+        person2organizationQuery,
+        [personIDsArray, organizationIDsArray]
+      );
+
+      person2organizationResults.forEach((connection) => {
+        const key = `person_${connection.personID}-organization_${connection.organizationID}`;
+        edgesMap.set(key, {
+          from: `person_${connection.personID}`,
+          to: `organization_${connection.organizationID}`,
+          type: 'organization',
+          ...connection,
+        });
+      });
+    }
+
+    // Fetch person-to-religion edges
+    if (personIDs.size > 0 && religionIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+      const religionIDsArray = Array.from(religionIDs);
+
+      const person2religionQuery = `
+        SELECT *
+        FROM person2religion
+        WHERE personID IN (?) AND religionID IN (?)
+      `;
+      const [person2religionResults] = await promisePool.query(
+        person2religionQuery,
+        [personIDsArray, religionIDsArray]
+      );
+
+      person2religionResults.forEach((connection) => {
+        const key = `person_${connection.personID}-religion_${connection.religionID}`;
+        edgesMap.set(key, {
+          from: `person_${connection.personID}`,
+          to: `religion_${connection.religionID}`,
+          type: 'religion',
+          ...connection,
+        });
+      });
+    }
+
+    // **Finalize edges array**
     const edges = Array.from(edgesMap.values());
 
     res.json(edges);
@@ -3772,6 +4241,8 @@ router.post('/edges-query', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
+
 
 
 
