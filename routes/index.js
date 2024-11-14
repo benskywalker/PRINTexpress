@@ -2536,662 +2536,353 @@ router.get("/query-tool-fields", async (req, res) => {
 });
 
 const convertDataToGraph = async (data) => {
-  const nodes = [];
-  const edges = [];
+  const nodesMap = new Map();
+  const edgesMap = new Map();
+
   const db = await dbPromise;
   const promisePool = db.promise();
 
-  const personPromises = data.map(async (row) => {
-    if (row.personID) {
-      const fullNameTitleCase = `${row.firstName} ${row.lastName}`.replace(
+  // Collect IDs from data
+  const personIDs = new Set();
+  const documentIDs = new Set();
+  const religionIDs = new Set();
+  const organizationIDs = new Set();
+
+  data.forEach((row) => {
+    if (row.personID) personIDs.add(row.personID);
+    if (row.docID) documentIDs.add(row.docID);
+    if (row.religionID) religionIDs.add(row.religionID);
+    if (row.organizationID) organizationIDs.add(row.organizationID);
+  });
+
+  // Fetch people
+  let peopleResults = [];
+  if (personIDs.size > 0) {
+    const peopleQuery = `
+      SELECT * FROM person
+      WHERE personID IN (?)
+    `;
+    [peopleResults] = await promisePool.query(peopleQuery, [Array.from(personIDs)]);
+  }
+
+  // Fetch documents
+  let documentResults = [];
+  if (documentIDs.size > 0) {
+    const documentsQuery = `
+      SELECT a.*, b.internalPDFname, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
+      FROM document a
+      LEFT JOIN pdf_documents b ON a.documentID = b.documentID
+      AND b.fileTypeID = 2
+      WHERE a.documentID IN (?)
+    `;
+    [documentResults] = await promisePool.query(documentsQuery, [Array.from(documentIDs)]);
+  }
+
+  // Process people
+  peopleResults.forEach((person) => {
+    nodesMap.set(`person_${person.personID}`, {
+      id: `person_${person.personID}`,
+      fullName: `${person.firstName} ${person.lastName}`.replace(
         /\b\w/g,
         (l) => l.toUpperCase()
-      );
-      // Add person node if not already added
-      if (!nodes.find((node) => node.id === `person_${row.personID}`)) {
-        // Fetch relationships for the person
-        const relationshipsQuery = `
-          SELECT
-      r.relationshipID,
-      r.person1ID,
-      CONCAT(p1.firstName, ' ', p1.lastName) AS person1,
-      r.person2ID,
-      CONCAT(p2.firstName, ' ', p2.lastName) AS person2,
-      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
-      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
-      r.dateStart,
-      r.dateEnd,
-      r.uncertain,
-      r.dateEndCause,
-      r.relationship1to2ID,
-      r.relationship2to1ID
-    FROM
-      relationship r
-    LEFT JOIN
-      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
-    LEFT JOIN
-      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-    LEFT JOIN
-    person p1 ON r.person1ID = p1.personID
-    LEFT JOIN
-    person p2 ON r.person2ID = p2.personID
-    WHERE
-    r.person1ID = ${row.personID} OR r.person2ID = ${row.personID}
-    ORDER BY relationshipID;
-        `;
-        const [relationships] = await promisePool.query(relationshipsQuery);
+      ),
+      documents: [],
+      relations: [],
+      mentions: [],
+      group: "person",
+      nodeType: "person",
+      ...person,
+    });
+  });
 
-        const relations = relationships.map((rel) => ({
-          relationship: rel,
-        }));
+  // Process documents
+  documentResults.forEach((document) => {
+    nodesMap.set(`document_${document.documentID}`, {
+      id: `document_${document.documentID}`,
+      label: `${document.importID}`,
+      group: "document",
+      nodeType: "document",
+      keywords: [],
+      ...document,
+    });
+  });
 
-        nodes.push({
-          id: `person_${row.personID}`,
-          label: fullNameTitleCase,
-          group: "person",
-          person: { fullName: fullNameTitleCase, ...row },
-          documents: [],
-          relations,
-        });
-      }
+  // Fetch person2document connections involving these people or documents
+  let person2documentResults = [];
+  if (personIDs.size > 0 || documentIDs.size > 0) {
+    const personIDsArray = Array.from(personIDs);
+    const documentIDsArray = Array.from(documentIDs);
+    const whereClauses = [];
+    const params = [];
 
-      const personID = row.personID;
+    if (personIDsArray.length > 0) {
+      whereClauses.push('personID IN (?)');
+      params.push(personIDsArray);
+    }
+    if (documentIDsArray.length > 0) {
+      whereClauses.push('docID IN (?)');
+      params.push(documentIDsArray);
+    }
 
-      // Get all documents associated with the person
-      const person2documentQuery = `
-        SELECT *
-        FROM person2document
-        WHERE personID = ${personID};
-      `;
+    const person2documentQuery = `
+      SELECT *
+      FROM person2document
+      WHERE ${whereClauses.join(' OR ')}
+    `;
+    [person2documentResults] = await promisePool.query(person2documentQuery, params);
+  }
 
-      const [personDocs] = await promisePool.query(person2documentQuery);
+  // Process person2document connections
+  person2documentResults.forEach((connection) => {
+    const personNode = nodesMap.get(`person_${connection.personID}`);
+    const documentNode = nodesMap.get(`document_${connection.docID}`);
 
-      const documentPromises = personDocs.map(async (docRelation) => {
-        const documentID = docRelation.docID;
+    if (personNode && documentNode) {
+      personNode.documents.push({ document: documentNode });
 
-        // Add document node if not already added
-        if (!nodes.find((node) => node.id === `document_${documentID}`)) {
-          // Fetch document details
-          const documentQuery = `
-            SELECT
-              d.*,
-              pd.internalPDFname,
-              pd.pdfDesc,
-              pd.pdfURL,
-              pd.pdfID,
-              DATE_FORMAT(d.sortingDate, '%Y-%m-%d') AS date
-            FROM document d
-            LEFT JOIN pdf_documents pd ON pd.documentID = d.documentID
-            WHERE d.documentID = ${documentID};
-          `;
-          const [documentRows] = await promisePool.query(documentQuery);
-          const document = documentRows[0];
-
-          if (document) {
-            nodes.push({
-              id: `document_${documentID}`,
-              label: `Document ${documentID}`,
-              group: "document",
-              document,
-            });
-          }
-        }
-
-        // Create edge between person and document
-        edges.push({
-          from: `person_${personID}`,
-          to: `document_${documentID}`,
-          label: `Role ${docRelation.roleID}`,
-        });
-
-        // Now, get other persons connected to the same document
-        const documentConnectionsQuery = `
-          SELECT *
-          FROM person2document
-          WHERE docID = ${documentID} AND personID != ${personID};
-        `;
-        const [otherPersons] = await promisePool.query(
-          documentConnectionsQuery
-        );
-
-        const otherPersonPromises = otherPersons.map(
-          async (otherPersonRelation) => {
-            const otherPersonID = otherPersonRelation.personID;
-
-            // Add other person node if not already added
-            if (!nodes.find((node) => node.id === `person_${otherPersonID}`)) {
-              // Fetch person details
-              const personQuery = `
-              SELECT * FROM person WHERE personID = ${otherPersonID};
-            `;
-              const [personRows] = await promisePool.query(personQuery);
-              const otherPerson = personRows[0];
-              const otherFullNameTitleCase =
-                `${otherPerson.firstName} ${otherPerson.lastName}`.replace(
-                  /\b\w/g,
-                  (l) => l.toUpperCase()
-                );
-
-              // Fetch relationships for the other person
-              const otherPersonRelationshipsQuery = `
-                SELECT 
-                  r.relationshipID,
-                  r.person1ID,
-                  r.person2ID,
-                  rt1.relationshipDesc AS relationship1to2Desc,
-                  rt2.relationshipDesc AS relationship2to1Desc,
-                  r.dateStart,
-                  r.dateEnd,
-                  r.uncertain,
-                  r.dateEndCause,
-                  r.relationship1to2ID,
-                  r.relationship2to1ID
-                FROM relationship r
-                LEFT JOIN relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
-                LEFT JOIN relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-                WHERE r.person1ID = ${otherPersonID} OR r.person2ID = ${otherPersonID};
-              `;
-              const [otherPersonRelationships] = await promisePool.query(
-                otherPersonRelationshipsQuery
-              );
-
-              nodes.push({
-                id: `person_${otherPersonID}`,
-                label: otherFullNameTitleCase,
-                group: "person",
-                person: { fullName: otherFullNameTitleCase, ...otherPerson },
-                documents: [],
-                relationships: otherPersonRelationships,
-              });
-            }
-
-            // Create edge between document and other person
-            edges.push({
-              from: `document_${documentID}`,
-              to: `person_${otherPersonID}`,
-              label: `Role ${otherPersonRelation.roleID}`,
-            });
-          }
-        );
-
-        await Promise.all(otherPersonPromises);
+      // Add edge
+      const key = `person_${connection.personID}-document_${connection.docID}`;
+      edgesMap.set(key, {
+        from: `person_${connection.personID}`,
+        to: `document_${connection.docID}`,
+        role: connection.roleID,
+        type:
+          connection.roleID === 1
+            ? "sender"
+            : connection.roleID === 2
+            ? "receiver"
+            : connection.roleID === 3
+            ? "mentioned"
+            : connection.roleID === 4
+            ? "author"
+            : connection.roleID === 5
+            ? "waypoint"
+            : undefined,
+        ...connection,
       });
-
-      await Promise.all(documentPromises);
     }
   });
 
-  await Promise.all(personPromises);
+  // Fetch relationships involving these people
+  let relationshipsResults = [];
+  if (personIDs.size > 0) {
+    const relationshipsQuery = `
+      SELECT
+        r.relationshipID,
+        r.person1ID,
+        r.person2ID,
+        COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+        COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+        r.dateStart,
+        r.dateEnd,
+        r.uncertain,
+        r.dateEndCause,
+        r.relationship1to2ID,
+        r.relationship2to1ID
+      FROM
+        relationship r
+      LEFT JOIN
+        relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+      LEFT JOIN
+        relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+      WHERE
+        r.person1ID IN (?) OR r.person2ID IN (?)
+      ORDER BY relationshipID;
+    `;
+    const personIDsArray = Array.from(personIDs);
+    [relationshipsResults] = await promisePool.query(relationshipsQuery, [personIDsArray, personIDsArray]);
+  }
 
-  return { nodes, edges };
-};
+  // Process relationships
+  relationshipsResults.forEach((relationship) => {
+    const person1Node = nodesMap.get(`person_${relationship.person1ID}`);
+    const person2Node = nodesMap.get(`person_${relationship.person2ID}`);
 
-router.post("/graph2", async (req, res) => {
-  const peopleQuery = `
-    SELECT *
-    FROM person;
-  `;
-
-  const documentsQuery = `
-    SELECT a.*, b.*, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date FROM document a, 
-    pdf_documents b where a.documentID = b.documentID;
-  `;
-
-  const documentConnectionsQuery = `
-    SELECT *
-    FROM person2document;
-  `;
-
-  const relationshipsQuery = `
-    SELECT
-      r.relationshipID,
-      r.person1ID,
-      r.person2ID,
-      COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
-      COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
-      r.dateStart,
-      r.dateEnd,
-      r.uncertain,
-      r.dateEndCause,
-      r.relationship1to2ID,
-      r.relationship2to1ID
-    FROM
-      relationship r
-    LEFT JOIN
-      relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
-    LEFT JOIN
-      relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-    WHERE person1ID != person2ID
-    ORDER BY relationshipID;
-  `;
-
-  const religionQuery = `
-    SELECT *
-    FROM religion;
-  `;
-
-  const organizationQuery = `
-    SELECT *
-    FROM organization;
-  `;
-
-  const religionConnectionsQuery = `
-    SELECT *
-    FROM person2religion;
-  `;
-
-  const organizationConnectionsQuery = `
-    SELECT *
-    FROM person2organization;
-  `;
-
-  try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
-    const [peopleResults] = await promisePool.query(peopleQuery);
-    const [documentResults] = await promisePool.query(documentsQuery);
-    const [documentConnectionResults] = await promisePool.query(
-      documentConnectionsQuery
-    );
-    const [relationshipResults] = await promisePool.query(relationshipsQuery);
-    const [religionResults] = await promisePool.query(religionQuery);
-    const [organizationResults] = await promisePool.query(organizationQuery);
-    const [religionConnectionResults] = await promisePool.query(
-      religionConnectionsQuery
-    );
-    const [organizationConnectionResults] = await promisePool.query(
-      organizationConnectionsQuery
-    );
-
-    const peopleArr = peopleResults;
-    const documentsArr = documentResults;
-    const documentConnectionsArr = documentConnectionResults;
-    const relationshipsArr = relationshipResults;
-    const religionsArr = religionResults;
-    const organizationsArr = organizationResults;
-    const religionConnectionsArr = religionConnectionResults;
-    const organizationConnectionsArr = organizationConnectionResults;
-
-    const edges = [];
-    const nodes = [];
-
-    // Helper function to generate a unique ID based on node type and ID
-    const generateUniqueId = (type, id) => `${type}_${id}`;
-
-    // Create a map for person nodes to easily update their documents array
-    const personNodeMap = new Map();
-
-    // Mapping of role IDs to role names
-    const roleNames = {
-      1: "Sender",
-      2: "Receiver",
-      3: "Mentioned",
-      4: "Author",
-      5: "Waypoint",
-    };
-
-    // Create nodes for people
-    peopleArr.forEach((person) => {
-      const uniqueId = generateUniqueId("person", person.personID);
-      const personNode = {
-        person: {
-          ...person,
-          fullName: `${person.firstName} ${person.lastName}`.replace(
-            /\b\w/g,
-            (l) => l.toUpperCase()
-          ),
+    if (person1Node && person2Node) {
+      person1Node.relations.push({
+        relationship: {
+          ...relationship,
+          person1: person1Node.fullName,
+          person2: person2Node.fullName,
         },
-        nodeType: "person",
-        id: uniqueId,
-        documents: [],
-        relations: [],
-        mentions: [],
-      };
-      nodes.push(personNode);
-      personNodeMap.set(uniqueId, personNode);
-    });
-
-    // Create nodes for documents
-    documentsArr.forEach((document) => {
-      const uniqueId = generateUniqueId("document", document.documentID);
-
-      // Create document name: Sender fullname - Receiver fullname - Date
-      const senderID = documentConnectionsArr.find(
-        (connection) =>
-          connection.docID === document.documentID && connection.roleID === 1
-      );
-      const sender = peopleArr.find(
-        (person) => person.personID === senderID?.personID
-      );
-      const senderFullNameLower = `${sender?.firstName} ${sender?.lastName}`;
-      const receiverID = documentConnectionsArr.find(
-        (connection) =>
-          connection.docID === document.documentID && connection.roleID === 2
-      );
-      const receiver = peopleArr.find(
-        (person) => person.personID === receiverID?.personID
-      );
-      const receiverFullNameLower = `${receiver?.firstName} ${receiver?.lastName}`;
-      const senderFullName = senderFullNameLower.replace(/\b\w/g, (l) =>
-        l.toUpperCase()
-      );
-      const receiverFullName = receiverFullNameLower.replace(/\b\w/g, (l) =>
-        l.toUpperCase()
-      );
-      const documentName = `${senderFullName} - ${receiverFullName} - ${document.date}`;
-
-      // Get connections for this document with full names and role names
-      const connections = documentConnectionsArr
-        .filter((connection) => connection.docID === document.documentID)
-        .map((connection) => {
-          const person = peopleArr.find(
-            (p) => p.personID === connection.personID
-          );
-          const personFullName =
-            `${person?.firstName} ${person?.lastName}`.replace(/\b\w/g, (l) =>
-              l.toUpperCase()
-            );
-          const roleName = roleNames[connection.roleID] || "Unknown";
-          return {
-            personFullName,
-            roleName,
-          };
-        });
-
-      nodes.push({
-        document: {
-          ...document,
-          documentName,
-          connections,
-        },
-        nodeType: "document",
-        id: uniqueId,
       });
-    });
+      person2Node.relations.push({
+        relationship: {
+          ...relationship,
+          person1: person1Node.fullName,
+          person2: person2Node.fullName,
+        },
+      });
 
-    // Ensure each religion node is unique by checking religionID before adding
-    religionsArr.forEach((religion) => {
-      const uniqueId = generateUniqueId("religion", religion.religionID);
-      const existingNode = nodes.find(
-        (node) => node.id === uniqueId && node.nodeType === "religion"
-      );
-      if (!existingNode) {
-        nodes.push({ religion, nodeType: "religion", id: uniqueId });
-      }
-    });
-
-    // Create nodes for organizations
-    organizationsArr.forEach((organization) => {
-      const uniqueId = generateUniqueId(
-        "organization",
-        organization.organizationID
-      );
-      nodes.push({ organization, nodeType: "organization", id: uniqueId });
-    });
-
-    documentConnectionsArr.forEach((connection) => {
-      const documentId = generateUniqueId("document", connection.docID);
-      const document = documentsArr.find(
-        (doc) => generateUniqueId("document", doc.documentID) === documentId
-      );
-
-      if (connection.roleID == 1) {
-        // Sender
-        const senderId = generateUniqueId("person", connection.personID);
-        edges.push({
-          document,
-          from: senderId,
-          to: documentId,
-          type: "document",
-        });
-        // Update the sender's documents array
-        const senderNode = personNodeMap.get(senderId);
-        const senderFullNameLower = `${senderNode.person.firstName} ${senderNode.person.lastName}`;
-        const receiverID = documentConnectionsArr.find(
-          (conn) => conn.docID === document.documentID && conn.roleID === 2
-        );
-        const receiver = peopleArr.find(
-          (person) => person.personID === receiverID?.personID
-        );
-        const receiverFullNameLower = `${receiver?.firstName} ${receiver?.lastName}`;
-        const senderFullName = senderFullNameLower.replace(/\b\w/g, (l) =>
-          l.toUpperCase()
-        );
-        const receiverFullName = receiverFullNameLower.replace(/\b\w/g, (l) =>
-          l.toUpperCase()
-        );
-        if (senderNode) {
-          senderNode.documents.push({
-            document: {
-              ...document,
-              sender: senderFullName,
-              receiver: receiverFullName,
-            },
-          });
-        }
-      } else if (connection.roleID == 2) {
-        // Receiver
-        const receiverId = generateUniqueId("person", connection.personID);
-        edges.push({
-          document,
-          from: documentId,
-          to: receiverId,
-          type: "document",
-        });
-        // Update the receiver's documents array
-        const receiverNode = personNodeMap.get(receiverId);
-        const receiverFullNameLower = `${receiverNode.person.firstName} ${receiverNode.person.lastName}`;
-        const senderID = documentConnectionsArr.find(
-          (conn) => conn.docID === document.documentID && conn.roleID === 1
-        );
-        const sender = peopleArr.find(
-          (person) => person.personID === senderID?.personID
-        );
-        const senderFullNameLower = `${sender?.firstName} ${sender?.lastName}`;
-        const senderFullName = senderFullNameLower.replace(/\b\w/g, (l) =>
-          l.toUpperCase()
-        );
-        const receiverFullName = receiverFullNameLower.replace(/\b\w/g, (l) =>
-          l.toUpperCase()
-        );
-        if (receiverNode) {
-          receiverNode.documents.push({
-            document: {
-              ...document,
-              receiver: receiverFullName,
-              sender: senderFullName,
-            },
-          });
-        }
-      } else if (connection.roleID == 3) {
-        // Mentioned
-        const mentionedId = generateUniqueId("person", connection.personID);
-        edges.push({
-          document,
-          from: documentId,
-          to: mentionedId,
-          type: "mentioned",
-        });
-        // Update the mentioned person's documents array
-        const mentionedNode = personNodeMap.get(mentionedId);
-        if (mentionedNode) {
-          mentionedNode.documents.push({
-            document,
-          });
-        }
-      } else if (connection.roleID == 4) {
-        // Author
-        const authorId = generateUniqueId("person", connection.personID);
-        edges.push({
-          document,
-          from: authorId,
-          to: documentId,
-          type: "author",
-        });
-        // Update the author's documents array
-        const authorNode = personNodeMap.get(authorId);
-        if (authorNode) {
-          authorNode.documents.push({
-            document,
-          });
-        }
-      } else if (connection.roleID == 5) {
-        // Waypoint
-        const waypointId = generateUniqueId("person", connection.personID);
-        edges.push({
-          document,
-          from: documentId,
-          to: waypointId,
-          type: "document",
-        });
-        // Update the waypoint person's documents array
-        const waypointNode = personNodeMap.get(waypointId);
-        if (waypointNode) {
-          waypointNode.documents.push({
-            document,
-          });
-        }
-      } else {
-        console.log("Unknown roleID:", connection.roleID);
-      }
-    });
-
-    relationshipsArr.forEach((relationship) => {
-      const person1Id = generateUniqueId("person", relationship.person1ID);
-      const person2Id = generateUniqueId("person", relationship.person2ID);
-
-      edges.push({
-        from: person1Id,
-        to: person2Id,
+      // Add edge
+      const key = `person_${relationship.person1ID}-person_${relationship.person2ID}`;
+      edgesMap.set(key, {
+        from: `person_${relationship.person1ID}`,
+        to: `person_${relationship.person2ID}`,
         type: "relationship",
         relationship1to2Desc: relationship.relationship1to2Desc || "Unknown",
         relationship2to1Desc: relationship.relationship2to1Desc || "Unknown",
         dateStart: relationship.dateStart || "N/A",
         dateEnd: relationship.dateEnd || "N/A",
+        ...relationship,
       });
 
-      // Update the person nodes with relationships
-      const person1Node = personNodeMap.get(person1Id);
-      const person2Node = personNodeMap.get(person2Id);
+      const reverseKey = `person_${relationship.person2ID}-person_${relationship.person1ID}`;
 
-      if (person1Node) {
-        person1Node.relations.push({
-          relationship: {
-            ...relationship,
-            person1: person1Node.person.fullName,
-            person2: person2Node.person.fullName,
-          },
+      if (!edgesMap.has(reverseKey)) {
+        edgesMap.set(reverseKey, {
+          from: `person_${relationship.person2ID}`,
+          to: `person_${relationship.person1ID}`,
+          type: "relationship",
+          relationship1to2Desc:
+            relationship.relationship2to1Desc || "Unknown",
+          relationship2to1Desc:
+            relationship.relationship1to2Desc || "Unknown",
+          dateStart: relationship.dateStart || "N/A",
+          dateEnd: relationship.dateEnd || "N/A",
+          ...relationship,
         });
       }
+    }
+  });
 
-      if (person2Node) {
-        person2Node.relations.push({
-          relationship: {
-            ...relationship,
-            person1: person1Node.person.fullName,
-            person2: person2Node.person.fullName,
-          },
-        });
+  // Fetch and process religions
+  let religionResults = [];
+  if (religionIDs.size > 0) {
+    const religionsQuery = `
+      SELECT *
+      FROM religion
+      WHERE religionID IN (?)
+    `;
+    [religionResults] = await promisePool.query(religionsQuery, [Array.from(religionIDs)]);
+
+    religionResults.forEach((religion) => {
+      nodesMap.set(`religion_${religion.religionID}`, {
+        id: `religion_${religion.religionID}`,
+        label: religion.religionDesc,
+        group: "religion",
+        nodeType: "religion",
+        ...religion,
+      });
+    });
+
+    // Fetch person2religion connections
+    let person2religionResults = [];
+    const personIDsArray = Array.from(personIDs);
+    const religionIDsArray = Array.from(religionIDs);
+    if (personIDsArray.length > 0 || religionIDsArray.length > 0) {
+      const whereClauses = [];
+      const params = [];
+      if (personIDsArray.length > 0) {
+        whereClauses.push('personID IN (?)');
+        params.push(personIDsArray);
       }
-    });
+      if (religionIDsArray.length > 0) {
+        whereClauses.push('religionID IN (?)');
+        params.push(religionIDsArray);
+      }
+      const person2religionQuery = `
+        SELECT *
+        FROM person2religion
+        WHERE ${whereClauses.join(' OR ')}
+      `;
+      [person2religionResults] = await promisePool.query(person2religionQuery, params);
 
-    // Create edges for people to religions
-    religionConnectionsArr.forEach((connection) => {
-      const religionId = generateUniqueId("religion", connection.religionID);
-      const personId = generateUniqueId("person", connection.personID);
-      edges.push({
-        from: personId,
-        to: religionId,
-        type: "religion",
+      person2religionResults.forEach((connection) => {
+        const personNode = nodesMap.get(`person_${connection.personID}`);
+        const religionNode = nodesMap.get(
+          `religion_${connection.religionID}`
+        );
+
+        if (personNode && religionNode) {
+          // Add edge
+          const key = `person_${connection.personID}-religion_${connection.religionID}`;
+          edgesMap.set(key, {
+            from: `person_${connection.personID}`,
+            to: `religion_${connection.religionID}`,
+            role: "religion",
+            type: "religion",
+            ...connection,
+          });
+        }
+      });
+    }
+  }
+
+  // Fetch and process organizations
+  let organizationResults = [];
+  if (organizationIDs.size > 0) {
+    const organizationsQuery = `
+      SELECT *
+      FROM organization
+      WHERE organizationID IN (?)
+    `;
+    [organizationResults] = await promisePool.query(organizationsQuery, [Array.from(organizationIDs)]);
+
+    organizationResults.forEach((organization) => {
+      nodesMap.set(`organization_${organization.organizationID}`, {
+        id: `organization_${organization.organizationID}`,
+        label: organization.organizationDesc,
+        group: "organization",
+        nodeType: "organization",
+        ...organization,
       });
     });
 
-    // Create edges for people to organizations
-    organizationConnectionsArr.forEach((connection) => {
-      const organizationId = generateUniqueId(
-        "organization",
-        connection.organizationID
-      );
-      const personId = generateUniqueId("person", connection.personID);
-      edges.push({
-        from: personId,
-        to: organizationId,
-        type: "organization",
+    // Fetch person2organization connections
+    let person2organizationResults = [];
+    const personIDsArray = Array.from(personIDs);
+    const organizationIDsArray = Array.from(organizationIDs);
+    if (personIDsArray.length > 0 || organizationIDsArray.length > 0) {
+      const whereClauses = [];
+      const params = [];
+      if (personIDsArray.length > 0) {
+        whereClauses.push('personID IN (?)');
+        params.push(personIDsArray);
+      }
+      if (organizationIDsArray.length > 0) {
+        whereClauses.push('organizationID IN (?)');
+        params.push(organizationIDsArray);
+      }
+      const person2organizationQuery = `
+        SELECT *
+        FROM person2organization
+        WHERE ${whereClauses.join(' OR ')}
+      `;
+      [person2organizationResults] = await promisePool.query(person2organizationQuery, params);
+
+      person2organizationResults.forEach((connection) => {
+        const personNode = nodesMap.get(`person_${connection.personID}`);
+        const organizationNode = nodesMap.get(
+          `organization_${connection.organizationID}`
+        );
+
+        if (personNode && organizationNode) {
+          // Add edge
+          const key = `person_${connection.personID}-organization_${connection.organizationID}`;
+          edgesMap.set(key, {
+            from: `person_${connection.personID}`,
+            to: `organization_${connection.organizationID}`,
+            role: "organization",
+            type: "organization",
+            ...connection,
+          });
+        }
       });
-    });
-
-    // Filter out edges where 'from' or 'to' is null
-    const filteredEdges = edges.filter(
-      (edge) => edge.from !== null && edge.to !== null
-    );
-
-    res.json({
-      edges: filteredEdges,
-      nodes,
-      elength: filteredEdges.length,
-      nlength: nodes.length,
-    });
-  } catch (error) {
-    console.error("Error fetching data:", error);
-    res.status(500).send("Internal Server Error");
+    }
   }
-});
 
-router.get("/relations", async (req, res) => {
-  console.log("GET request received");
-  const query = `
-  SELECT 
-    r.relationshipID,
-    r.person1ID,
-    r.person2ID,
-    rt1.relationshipDesc AS relationship1to2Desc,
-    rt2.relationshipDesc AS relationship2to1Desc,
-    r.dateStart,
-    r.dateEnd,
-    r.uncertain,
-    r.dateEndCause,
-    r.relationship1to2ID,
-    r.relationship2to1ID
-    from relationship r
-    left join relationshiptype rt1 on r.relationship1to2ID = rt1.relationshiptypeID
-    left join relationshiptype rt2 on r.relationship2to1ID = rt2.relationshiptypeID;
-  `;
-  const nodeQuery = `
-  SELECT
-    personID,
-    CONCAT(firstName, ' ', lastName) AS fullName
-  FROM person;
-  `;
+  // Convert nodesMap and edgesMap to arrays
+  const nodes = Array.from(nodesMap.values());
+  const edges = Array.from(edgesMap.values());
 
-  try {
-    const db = await dbPromise;
-    const promisePool = db.promise();
-    const [results] = await promisePool.query(query);
-    const [nodes] = await promisePool.query(nodeQuery);
-    const edges = results.map((result) => {
-      return {
-        relationshipID: result.relationshipID,
-        person1ID: result.person1ID,
-        person2ID: result.person2ID,
-        relationship1to2Desc: result.relationship1to2Desc,
-        relationship2to1Desc: result.relationship2to1Desc,
-        dateStart: result.dateStart,
-        dateEnd: result.dateEnd,
-        uncertain: result.uncertain,
-        dateEndCause: result.dateEndCause,
-        relationship1to2ID: result.relationship1to2ID,
-        relationship2to1ID: result.relationship2to1ID,
-        from: result.person1ID,
-        to: result.person2ID,
-      };
-    });
+  return { nodes, edges };
+};
 
-    res.json(edges);
-  } catch (error) {
-    console.error("Error fetching data:", error);
-    res.status(500).send("Internal Server Error");
-  }
-});
+
+
+
+
 
 router.post("/knex-query", async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
@@ -3358,7 +3049,6 @@ router.post("/nodes", async (req, res) => {
 
     // Process Documents
     documentResults.forEach((document) => {
-      console.log(document.internalPDFname);
       nodesMap.set(`document_${document.documentID}`, {
         id: `document_${document.documentID}`,
         label: `${document.importID}`,
@@ -3609,688 +3299,480 @@ router.post("/edges", async (req, res) => {
   }
 });
 
+
+
 router.post('/nodes-query', async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
 
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
-    const results = [];
 
-    let sql;
+    let query = knex(tables[0]).select('*');
 
-    if (tables && tables.length > 0) {
-      sql = knex(tables[0]).select('*');
+    // Build the WHERE clause based on the input parameters
+    for (let i = 0; i < fields.length; i++) {
+      const field = fields[i];
+      const operator = operators[i];
+      const value = values[i];
 
-      sql = sql.where(fields[0], operators[0], values[0]);
-
-      // Apply filters for single table scenario
-      for (let i = 1; i < fields.length; i++) {
-        if (dependentFields[i - 1] === 'AND') {
-          sql = sql.andWhere(fields[i], operators[i], values[i]);
+      if (i === 0) {
+        query = query.where(field, operator, value);
+      } else {
+        const dependentField = dependentFields[i - 1];
+        if (dependentField === 'AND') {
+          query = query.andWhere(field, operator, value);
         } else {
-          sql = sql.orWhere(fields[i], operators[i], values[i]);
+          query = query.orWhere(field, operator, value);
         }
       }
+    }
 
-      console.log("HEREEEEEEE: ", sql.toString());
+    // Execute the query
+    const [rows] = await promisePool.query(query.toString());
 
-      // Execute the query
-      const [rows] = await promisePool.query(sql.toString());
+    // Process the nodes similar to the /nodes route
+    const nodesMap = new Map();
+    const personIDs = new Set();
+    const documentIDs = new Set();
 
-      // Initialize maps to prevent duplicate nodes
-      const nodesMap = new Map();
-      const edges = [];
+    // Process initial nodes and collect IDs
+    rows.forEach((row) => {
+      if (tables[0] === 'person') {
+        const nodeId = `person_${row.personID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          fullName: `${row.firstName} ${row.lastName}`.replace(/\b\w/g, (l) =>
+            l.toUpperCase()
+          ),
+          documents: [],
+          relations: [],
+          mentions: [],
+          group: 'person',
+          nodeType: 'person',
+          ...row,
+        });
+        personIDs.add(row.personID);
+      } else if (tables[0] === 'document') {
+        const nodeId = `document_${row.documentID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: `${row.importID}`,
+          group: 'document',
+          nodeType: 'document',
+          keywords: [],
+          ...row,
+        });
+        documentIDs.add(row.documentID);
+      }
+      // Add more cases for other tables if needed
+    });
 
-      // Helper function to generate unique IDs
-      const generateUniqueId = (type, id) => `${type}_${id}`;
+    // **Fetch associated documents for each person**
+    if (personIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
 
-      // Process each row to create nodes
-      for (const row of rows) {
-        if (row.personID) {
-          // Process Person Node
-          const personId = row.personID;
-          const uniqueId = generateUniqueId('person', personId);
+      // Fetch person2document entries for these persons
+      const person2documentQuery = `
+        SELECT *
+        FROM person2document
+        WHERE personID IN (?)
+      `;
+      const [person2documentResults] = await promisePool.query(
+        person2documentQuery,
+        [personIDsArray]
+      );
 
-          if (!nodesMap.has(uniqueId)) {
-            const fullName = `${row.firstName} ${row.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
+      // Collect document IDs
+      person2documentResults.forEach((p2d) => {
+        documentIDs.add(p2d.docID);
+      });
 
-            nodesMap.set(uniqueId, {
-              id: uniqueId,
-              label: fullName,
-              group: 'person',
-              nodeType: 'person',
-              fullName: fullName,
-              documents: [],
-              relations: [],
-              mentions: [],
-              ...row
-            });
-          }
+      // Fetch documents
+      let documentResults = [];
+      if (documentIDs.size > 0) {
+        const documentIDsArray = Array.from(documentIDs);
 
-          // Fetch and process documents related to the person
-          const person2documentQuery = `
-            SELECT p2d.*, d.*, 
-                   sender.firstName AS senderFirstName, sender.lastName AS senderLastName,
-                   receiver.firstName AS receiverFirstName, receiver.lastName AS receiverLastName
-            FROM person2document p2d
-            JOIN document d ON p2d.docID = d.documentID
-            LEFT JOIN person sender ON p2d.personID = sender.personID AND p2d.roleID = 1
-            LEFT JOIN person receiver ON p2d.personID = receiver.personID AND p2d.roleID = 2
-            WHERE p2d.personID = ${personId};
-          `;
-          const [person2documentResults] = await promisePool.query(person2documentQuery);
+        const documentsQuery = `
+          SELECT a.*, b.internalPDFname, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
+          FROM document a
+          LEFT JOIN pdf_documents b ON a.documentID = b.documentID
+          AND b.fileTypeID = 2
+          WHERE a.documentID IN (?)
+        `;
+        [documentResults] = await promisePool.query(documentsQuery, [documentIDsArray]);
 
-          for (const connection of person2documentResults) {
-            const documentId = connection.documentID;
-            const documentUniqueId = generateUniqueId('document', documentId);
-
-            // Create Document Node if not exists
-            if (!nodesMap.has(documentUniqueId)) {
-              const sender = connection.senderFirstName && connection.senderLastName
-                ? `${connection.senderFirstName} ${connection.senderLastName}`.replace(/\b\w/g, l => l.toUpperCase())
-                : null;
-              const receiver = connection.receiverFirstName && connection.receiverLastName
-                ? `${connection.receiverFirstName} ${connection.receiverLastName}`.replace(/\b\w/g, l => l.toUpperCase())
-                : null;
-
-              nodesMap.set(documentUniqueId, {
-                id: documentUniqueId,
-                label: `Document ${documentId}`,
-                group: 'document',
-                nodeType: 'document',
-                sender: sender,
-                receiver: receiver,
-                ...connection
-              });
-            }
-
-            // Create Edge between Person and Document
-            edges.push({
-              from: uniqueId,
-              to: documentUniqueId,
-              type: 'document',
-              role: connection.roleID, // You might want to map roleID to role names
-            });
-
-            // Update Person's Documents Array
-            const personNode = nodesMap.get(uniqueId);
-            personNode.documents.push({
-              document: nodesMap.get(documentUniqueId),
-              role: connection.roleID, // Optionally map to role names
-            });
-          }
-
-          // Fetch and process relationships related to the person
-          const relationshipQuery = `
-            SELECT 
-              r.relationshipID,
-              r.person1ID,
-              r.person2ID,
-              COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
-              COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
-              r.dateStart,
-              r.dateEnd,
-              r.uncertain,
-              r.dateEndCause,
-              r.relationship1to2ID,
-              r.relationship2to1ID
-            FROM relationship r
-            LEFT JOIN relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
-            LEFT JOIN relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-            WHERE r.person1ID = ${personId} OR r.person2ID = ${personId}
-            ORDER BY r.relationshipID;
-          `;
-          const [relationshipResults] = await promisePool.query(relationshipQuery);
-
-          for (const relationship of relationshipResults) {
-            const fromId = generateUniqueId('person', relationship.person1ID);
-            const toId = generateUniqueId('person', relationship.person2ID);
-
-            // Ensure both person nodes exist
-            if (!nodesMap.has(fromId)) {
-              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${relationship.person1ID}`);
-              if (person[0].length > 0) {
-                const p = person[0][0];
-                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
-                nodesMap.set(fromId, {
-                  id: fromId,
-                  label: fullName,
-                  group: 'person',
-                  nodeType: 'person',
-                  fullName: fullName,
-                  documents: [],
-                  relations: [],
-                  mentions: [],
-                  ...p
-                });
-              }
-            }
-
-            if (!nodesMap.has(toId)) {
-              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${relationship.person2ID}`);
-              if (person[0].length > 0) {
-                const p = person[0][0];
-                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
-                nodesMap.set(toId, {
-                  id: toId,
-                  label: fullName,
-                  group: 'person',
-                  nodeType: 'person',
-                  fullName: fullName,
-                  documents: [],
-                  relations: [],
-                  mentions: [],
-                  ...p
-                });
-              }
-            }
-
-            // Create Relationship Edge
-            edges.push({
-              from: fromId,
-              to: toId,
-              type: 'relationship',
-              relationship1to2Desc: relationship.relationship1to2Desc,
-              relationship2to1Desc: relationship.relationship2to1Desc,
-              dateStart: relationship.dateStart,
-              dateEnd: relationship.dateEnd,
-              uncertain: relationship.uncertain,
-              dateEndCause: relationship.dateEndCause,
-            });
-
-            // Update Relations Array for Both Persons
-            const fromNode = nodesMap.get(fromId);
-            const toNode = nodesMap.get(toId);
-
-            if (fromNode) {
-              fromNode.relations.push({
-                relationship: {
-                  ...relationship,
-                  person1: fromNode.fullName,
-                  person2: toNode ? toNode.fullName : 'Unknown',
-                }
-              });
-            }
-
-            if (toNode) {
-              toNode.relations.push({
-                relationship: {
-                  ...relationship,
-                  person1: fromNode ? fromNode.fullName : 'Unknown',
-                  person2: toNode.fullName,
-                }
-              });
-            }
-          }
-
-        } else if (row.documentID) {
-          // Process Document Node (if needed)
-          const documentId = row.documentID;
-          const uniqueId = generateUniqueId('document', documentId);
-
-          if (!nodesMap.has(uniqueId)) {
-            nodesMap.set(uniqueId, {
-              id: uniqueId,
-              label: `Document ${documentId}`,
+        documentResults.forEach((document) => {
+          const nodeId = `document_${document.documentID}`;
+          if (!nodesMap.has(nodeId)) {
+            nodesMap.set(nodeId, {
+              id: nodeId,
+              label: `${document.importID}`,
               group: 'document',
               nodeType: 'document',
-              ...row
+              keywords: [],
+              ...document,
             });
           }
-
-        } else if (row.religionID) {
-          // Process Religion Node
-          const religionId = row.religionID;
-          const uniqueId = generateUniqueId('religion', religionId);
-
-          if (!nodesMap.has(uniqueId)) {
-            nodesMap.set(uniqueId, {
-              id: uniqueId,
-              label: row.religionDesc,
-              group: 'religion',
-              nodeType: 'religion',
-              ...row
-            });
-          }
-
-          // Fetch and process people associated with this religion
-          const person2religionQuery = `
-            SELECT *
-            FROM person2religion
-            WHERE religionID = ${religionId};
-          `;
-          const [person2religionResults] = await promisePool.query(person2religionQuery);
-
-          for (const connection of person2religionResults) {
-            const personId = connection.personID;
-            const personUniqueId = generateUniqueId('person', personId);
-
-            // Create Person Node if not exists
-            if (!nodesMap.has(personUniqueId)) {
-              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${personId}`);
-              if (person[0].length > 0) {
-                const p = person[0][0];
-                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
-
-                nodesMap.set(personUniqueId, {
-                  id: personUniqueId,
-                  label: fullName,
-                  group: 'person',
-                  nodeType: 'person',
-                  fullName: fullName,
-                  documents: [],
-                  relations: [],
-                  mentions: [],
-                  ...p
-                });
-              }
-            }
-
-            // Create Edge between Person and Religion
-            edges.push({
-              from: personUniqueId,
-              to: uniqueId,
-              type: 'religion',
-            });
-
-            // Update Person's Relations Array
-            const personNode = nodesMap.get(personUniqueId);
-            if (personNode) {
-              personNode.relations.push({
-                relationship: {
-                  type: 'religion',
-                  relatedTo: row.religionDesc,
-                }
-              });
-            }
-          }
-
-        } else if (row.organizationID) {
-          // Process Organization Node
-          const organizationId = row.organizationID;
-          const uniqueId = generateUniqueId('organization', organizationId);
-
-          if (!nodesMap.has(uniqueId)) {
-            nodesMap.set(uniqueId, {
-              id: uniqueId,
-              label: row.organizationDesc,
-              group: 'organization',
-              nodeType: 'organization',
-              ...row
-            });
-          }
-
-          // Fetch and process people associated with this organization
-          const person2organizationQuery = `
-            SELECT *
-            FROM person2organization
-            WHERE organizationID = ${organizationId};
-          `;
-          const [person2organizationResults] = await promisePool.query(person2organizationQuery);
-
-          for (const connection of person2organizationResults) {
-            const personId = connection.personID;
-            const personUniqueId = generateUniqueId('person', personId);
-
-            // Create Person Node if not exists
-            if (!nodesMap.has(personUniqueId)) {
-              const person = await promisePool.query(`SELECT * FROM person WHERE personID = ${personId}`);
-              if (person[0].length > 0) {
-                const p = person[0][0];
-                const fullName = `${p.firstName} ${p.lastName}`.replace(/\b\w/g, l => l.toUpperCase());
-
-                nodesMap.set(personUniqueId, {
-                  id: personUniqueId,
-                  label: fullName,
-                  group: 'person',
-                  nodeType: 'person',
-                  fullName: fullName,
-                  documents: [],
-                  relations: [],
-                  mentions: [],
-                  ...p
-                });
-              }
-            }
-
-            // Create Edge between Person and Organization
-            edges.push({
-              from: personUniqueId,
-              to: uniqueId,
-              type: 'organization',
-            });
-
-            // Update Person's Relations Array
-            const personNode = nodesMap.get(personUniqueId);
-            if (personNode) {
-              personNode.relations.push({
-                relationship: {
-                  type: 'organization',
-                  relatedTo: row.organizationDesc,
-                }
-              });
-            }
-          }
-
-        }
+        });
       }
 
-      // Convert nodesMap to nodes array
-      const nodes = Array.from(nodesMap.values());
+      // Process Person to Document Relationships
+      person2documentResults.forEach((connection) => {
+        const personNode = nodesMap.get(`person_${connection.personID}`);
+        const documentNode = nodesMap.get(`document_${connection.docID}`);
 
-      res.json(nodes);
-    } else if (tables && tables.length === 0) {
-      res.json([]);
+        if (personNode && documentNode) {
+          personNode.documents.push({ document: documentNode });
+        }
+      });
+
+      // **Add sender and receiver information to documents**
+      if (documentIDs.size > 0) {
+        const people2documentResults = person2documentResults;
+
+        documentResults.forEach((documentData) => {
+          const documentNode = nodesMap.get(`document_${documentData.documentID}`);
+          if (documentNode) {
+            // Add sender and receiver information
+            const senderConnection = people2documentResults.find(
+              (connection) =>
+                connection.docID === documentData.documentID &&
+                connection.roleID === 1
+            );
+            const receiverConnection = people2documentResults.find(
+              (connection) =>
+                connection.docID === documentData.documentID &&
+                connection.roleID === 2
+            );
+
+            const senderNode = nodesMap.get(`person_${senderConnection?.personID}`);
+            const receiverNode = nodesMap.get(`person_${receiverConnection?.personID}`);
+
+            const senderFullName = senderNode?.fullName || 'Unknown';
+            const receiverFullName = receiverNode?.fullName || 'Unknown';
+
+            documentNode.sender = senderFullName;
+            documentNode.receiver = receiverFullName;
+          }
+        });
+      }
     }
+
+    // **Fetch and process relationships**
+    if (personIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+
+      const relationshipsQuery = `
+        SELECT
+          r.relationshipID,
+          r.person1ID,
+          r.person2ID,
+          COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+          COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+          r.dateStart,
+          r.dateEnd,
+          r.uncertain,
+          r.dateEndCause,
+          r.relationship1to2ID,
+          r.relationship2to1ID
+        FROM
+          relationship r
+        LEFT JOIN
+          relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+        LEFT JOIN
+          relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+        WHERE
+          r.person1ID IN (?) OR r.person2ID IN (?)
+        ORDER BY relationshipID;
+      `;
+      const [relationshipsResults] = await promisePool.query(
+        relationshipsQuery,
+        [personIDsArray, personIDsArray]
+      );
+
+      relationshipsResults.forEach((relationship) => {
+        const person1Node = nodesMap.get(`person_${relationship.person1ID}`);
+        const person2Node = nodesMap.get(`person_${relationship.person2ID}`);
+
+        // **Add the other person as a node if not already added**
+        [relationship.person1ID, relationship.person2ID].forEach(async (personID) => {
+          const nodeId = `person_${personID}`;
+          if (!nodesMap.has(nodeId)) {
+            const personQuery = `
+              SELECT *
+              FROM person
+              WHERE personID = ?
+            `;
+            const [personRows] = await promisePool.query(personQuery, [personID]);
+            const personData = personRows[0];
+            if (personData) {
+              nodesMap.set(nodeId, {
+                id: nodeId,
+                fullName: `${personData.firstName} ${personData.lastName}`.replace(/\b\w/g, (l) =>
+                  l.toUpperCase()
+                ),
+                documents: [],
+                relations: [],
+                mentions: [],
+                group: 'person',
+                nodeType: 'person',
+                ...personData,
+              });
+              personIDs.add(personID);
+            }
+          }
+        });
+
+        // Update person nodes
+        const updatedPerson1Node = nodesMap.get(`person_${relationship.person1ID}`);
+        const updatedPerson2Node = nodesMap.get(`person_${relationship.person2ID}`);
+
+        if (updatedPerson1Node && updatedPerson2Node) {
+          updatedPerson1Node.relations.push({
+            relationship: {
+              ...relationship,
+              person1: updatedPerson1Node.fullName,
+              person2: updatedPerson2Node.fullName,
+            },
+          });
+          updatedPerson2Node.relations.push({
+            relationship: {
+              ...relationship,
+              person1: updatedPerson1Node.fullName,
+              person2: updatedPerson2Node.fullName,
+            },
+          });
+        }
+      });
+    }
+
+    // **Fetch keywords and add them to documents**
+    if (documentIDs.size > 0) {
+      const documentIDsArray = Array.from(documentIDs);
+
+      const keywordsQuery = `
+        SELECT
+          a.keywordID, a.keyword, a.keywordLOD, a.parentID, a.parcel, a.keywordDef,
+          b.keyword2DocID, b.keywordID, b.docID, b.uncertain
+        FROM
+          keyword a
+        LEFT JOIN
+          keyword2document b ON a.keywordID = b.keywordID
+        WHERE
+          b.docID IN (?)
+      `;
+      const [keywordsResults] = await promisePool.query(keywordsQuery, [documentIDsArray]);
+
+      keywordsResults.forEach((keyword) => {
+        const documentNode = nodesMap.get(`document_${keyword.docID}`);
+        if (documentNode) {
+          documentNode.keywords.push(keyword.keyword);
+        }
+      });
+    }
+
+    // **Process person2religion and person2organization if needed**
+    // Add similar blocks here if you want to include religions and organizations
+
+    const nodes = Array.from(nodesMap.values());
+
+    res.json(nodes);
   } catch (error) {
-    console.error('Error running query:', error);
+    console.error('Error running nodes-query:', error);
     res.status(500).send('Internal Server Error');
   }
 });
 
 
-//edge query will find all the nodes that would be found in nodes query
-//then will proccess the edges between them
-router.post("/edges-query", async (req, res) => {
+
+// POST /edges-query
+router.post('/edges-query', async (req, res) => {
   const { tables, fields, operators, values, dependentFields } = req.body;
 
   try {
     const db = await dbPromise;
     const promisePool = db.promise();
-    const results = [];
 
-    let sql2;
+    // **Step 1: Generate Nodes (similar to /nodes-query)**
+    let query = knex(tables[0]).select('*');
 
-    if (tables && tables.length > 0) {
-      sql2 = knex(tables[0]).select("*");
+    // Build the WHERE clause based on the input parameters
+    for (let i = 0; i < fields.length; i++) {
+      const field = fields[i];
+      const operator = operators[i];
+      const value = values[i];
 
-      sql2 = sql2.where(fields[0], operators[0], values[0]);
-
-      // Apply filters for single table scenario
-      for (let i = 1; i < fields.length; i++) {
-        if (dependentFields[i - 1] === "AND") {
-          sql2 = sql2.andWhere(fields[i], operators[i], values[i]);
+      if (i === 0) {
+        query = query.where(field, operator, value);
+      } else {
+        const dependentField = dependentFields[i - 1];
+        if (dependentField === 'AND') {
+          query = query.andWhere(field, operator, value);
         } else {
-          sql2 = sql2.orWhere(fields[i], operators[i], values[i]);
+          query = query.orWhere(field, operator, value);
         }
       }
-
-      // Execute the query
-      const [rows] = await promisePool.query(sql2.toString());
-
-      // Grab all possible nodes from the query
-      const nodes = [];
-      const edges = [];
-      const promises = rows.map(async (row) => {
-        if (row.personID) {
-          const id = row.personID;
-          const label = `${row.firstName} ${row.lastName}`;
-          const group = "person";
-          const type = "person";
-          const newNode = {
-            id: `person_${id}`,
-            label,
-            group,
-            nodeType: "person",
-          };
-          nodes.push(newNode);
-
-          // Also push the person's documents
-          const person2documentQuery = `
-            SELECT *
-            FROM person2document
-            WHERE personID = ${id};
-          `;
-          const [person2documentResults] = await promisePool.query(person2documentQuery);
-
-          const documentPromises = person2documentResults.map(async (connection) => {
-            const documentID = connection.docID;
-            const documentQuery = `
-              SELECT *
-              FROM document
-              WHERE documentID = ${documentID};
-            `;
-            const [documentResults] = await promisePool.query(documentQuery);
-            const document = documentResults[0];
-            const newDocument = {
-              id: `document_${document.documentID}`,
-              label: `${document.documentID}`,
-              group: "document",
-              type: "document",
-            };
-            nodes.push(newDocument);
-
-            const newEdge = {
-              from: `person_${id}`,
-              to: `document_${document.documentID}`,
-              type: "document",
-            };
-            edges.push(newEdge);
-          });
-
-          await Promise.all(documentPromises);
-
-          // Add relationship edges
-          const relationshipQuery = `
-            SELECT 
-              r.relationshipID,
-              r.person1ID,
-              r.person2ID,
-              COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
-              COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
-              r.dateStart,
-              r.dateEnd,
-              r.uncertain,
-              r.dateEndCause,
-              r.relationship1to2ID,
-              r.relationship2to1ID
-            FROM
-              relationship r
-            LEFT JOIN
-              relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
-            LEFT JOIN
-              relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
-            WHERE person1ID = ${id} OR person2ID = ${id}
-            ORDER BY relationshipID;
-          `;
-          const [relationshipResults] = await promisePool.query(relationshipQuery);
-
-          relationshipResults.forEach((relationship) => {
-            
-            const newEdge = {
-              from: `person_${relationship.person1ID}`,
-              to: `person_${relationship.person2ID}`,
-              type: "relationship",
-            };
-            edges.push(newEdge);
-          });
-
-        } else if (row.documentID) {
-          const id = row.documentID;
-          const label = `${row.documentID}`;
-          const group = "document";
-          const type = "document";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
-        } else if (row.religionID) {
-          const id = row.religionID;
-          const label = `${row.religionDesc}`;
-          const group = "religion";
-          const type = "religion";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
-
-          // Get all people with this religion
-          const person2religionQuery = `
-            SELECT *
-            FROM person2religion
-            WHERE religionID = ${id};
-          `;
-          const [person2religionResults] = await promisePool.query(person2religionQuery);
-
-          const personPromises = person2religionResults.map(async (connection) => {
-            const personID = connection.personID;
-            const personQuery = `
-              SELECT *
-              FROM person
-              WHERE personID = ${personID};
-            `;
-            const [personResults] = await promisePool.query(personQuery);
-            const person = personResults[0];
-            const newPerson = {
-              id: `person_${person.personID}`,
-              label: `${person.firstName} ${person.lastName}`,
-              group: "person",
-              type: "person",
-            };
-            nodes.push(newPerson);
-
-            const newEdge = {
-              from: `person_${person.personID}`,
-              to: `religion_${id}`,
-              type: "religion",
-            };
-            edges.push(newEdge);
-
-            // Also push the person's documents
-            const person2documentQuery = `
-              SELECT *
-              FROM person2document
-              WHERE personID = ${personID};
-            `;
-            const [person2documentResults] = await promisePool.query(person2documentQuery);
-
-            const documentPromises = person2documentResults.map(async (connection) => {
-              const documentID = connection.docID;
-              const documentQuery = `
-                SELECT *
-                FROM document
-                WHERE documentID = ${documentID};
-              `;
-              const [documentResults] = await promisePool.query(documentQuery);
-              const document = documentResults[0];
-              const newDocument = {
-                id: `document_${document.documentID}`,
-                label: `${document.documentID}`,
-                group: "document",
-                type: "document",
-              };
-              nodes.push(newDocument);
-
-              const newEdge = {
-                from: `person_${personID}`,
-                to: `document_${document.documentID}`,
-                type: "document",
-              };
-              edges.push(newEdge);
-            });
-
-            await Promise.all(documentPromises);
-          });
-
-          await Promise.all(personPromises);
-        } else if (row.organizationID) {
-          const id = row.organizationID;
-          const label = `${row.organizationDesc}`;
-          const group = "organization";
-          const type = "organization";
-          const newNode = {
-            id: `${group}_${id}`,
-            label,
-            group,
-            type: type,
-          };
-          nodes.push(newNode);
-
-          // Get all people with this organization
-          const person2organizationQuery = `
-            SELECT *
-            FROM person2organization
-            WHERE organizationID = ${id};
-          `;
-          const [person2organizationResults] = await promisePool.query(person2organizationQuery);
-
-          const personPromises = person2organizationResults.map(async (connection) => {
-            const personID = connection.personID;
-            const personQuery = `
-              SELECT *
-              FROM person
-              WHERE personID = ${personID};
-            `;
-            const [personResults] = await promisePool.query(personQuery);
-            const person = personResults[0];
-            const newPerson = {
-              id: `person_${person.personID}`,
-              label: `${person.firstName} ${person.lastName}`,
-              group: "person",
-              type: "person",
-            };
-            nodes.push(newPerson);
-
-            const newEdge = {
-              from: `person_${person.personID}`,
-              to: `organization_${id}`,
-              type: "organization",
-            };
-            edges.push(newEdge);
-
-            // Also push the person's documents
-            const person2documentQuery = `
-              SELECT *
-              FROM person2document
-              WHERE personID = ${personID};
-            `;
-            const [person2documentResults] = await promisePool.query(person2documentQuery);
-
-            const documentPromises = person2documentResults.map(async (connection) => {
-              const documentID = connection.docID;
-              const documentQuery = `
-                SELECT *
-                FROM document
-                WHERE documentID = ${documentID};
-              `;
-              const [documentResults] = await promisePool.query(documentQuery);
-              const document = documentResults[0];
-              const newDocument = {
-                id: `document_${document.documentID}`,
-                label: `${document.documentID}`,
-                group: "document",
-                type: "document",
-              };
-              nodes.push(newDocument);
-
-              const newEdge = {
-                from: `person_${personID}`,
-                to: `document_${document.documentID}`,
-                type: "document",
-              };
-              edges.push(newEdge);
-            });
-
-            await Promise.all(documentPromises);
-          });
-
-          await Promise.all(personPromises);
-        }
-      });
-
-      await Promise.all(promises);
-      res.json({ nodes, edges });
     }
+
+    // Execute the query to get nodes
+    const [rows] = await promisePool.query(query.toString());
+
+    // **Step 2: Process Nodes and Extract IDs**
+    const nodesMap = new Map();
+    const personIDs = new Set();
+    const documentIDs = new Set();
+
+    rows.forEach((row) => {
+      if (tables[0] === 'person') {
+        const nodeId = `person_${row.personID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          fullName: `${row.firstName} ${row.lastName}`.replace(/\b\w/g, (l) =>
+            l.toUpperCase()
+          ),
+          documents: [],
+          relations: [],
+          mentions: [],
+          group: 'person',
+          nodeType: 'person',
+          ...row,
+        });
+        personIDs.add(row.personID);
+      } else if (tables[0] === 'document') {
+        const nodeId = `document_${row.documentID}`;
+        nodesMap.set(nodeId, {
+          id: nodeId,
+          label: `${row.importID}`,
+          group: 'document',
+          nodeType: 'document',
+          keywords: [],
+          ...row,
+        });
+        documentIDs.add(row.documentID);
+      }
+      // Add more cases for other tables if needed
+    });
+
+    // **Fetch associated documents for each person (same as in /nodes-query)**
+    if (personIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+
+      // Fetch person2document entries for these persons
+      const person2documentQuery = `
+        SELECT *
+        FROM person2document
+        WHERE personID IN (?)
+      `;
+      const [person2documentResults] = await promisePool.query(
+        person2documentQuery,
+        [personIDsArray]
+      );
+
+      // Collect document IDs
+      person2documentResults.forEach((p2d) => {
+        documentIDs.add(p2d.docID);
+      });
+    }
+
+    // **Step 3: Query Junction Tables to Find Edges**
+    const edgesMap = new Map();
+
+    // Fetch person-to-document edges
+    if (personIDs.size > 0 && documentIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+      const documentIDsArray = Array.from(documentIDs);
+
+      const person2documentQuery = `
+        SELECT *
+        FROM person2document
+        WHERE personID IN (?) AND docID IN (?)
+      `;
+      const [person2documentResults] = await promisePool.query(
+        person2documentQuery,
+        [personIDsArray, documentIDsArray]
+      );
+
+      person2documentResults.forEach((connection) => {
+        const key = `person_${connection.personID}-document_${connection.docID}`;
+        edgesMap.set(key, {
+          from: `person_${connection.personID}`,
+          to: `document_${connection.docID}`,
+          role: connection.roleID,
+          type:
+            connection.roleID === 1
+              ? 'sender'
+              : connection.roleID === 2
+              ? 'receiver'
+              : connection.roleID === 3
+              ? 'mentioned'
+              : connection.roleID === 4
+              ? 'author'
+              : connection.roleID === 5
+              ? 'waypoint'
+              : undefined,
+          ...connection,
+        });
+      });
+    }
+
+    // Fetch person-to-person relationships
+    if (personIDs.size > 0) {
+      const personIDsArray = Array.from(personIDs);
+
+      const relationshipsQuery = `
+        SELECT
+          r.relationshipID,
+          r.person1ID,
+          r.person2ID,
+          COALESCE(rt1.relationshipDesc, 'Unknown') AS relationship1to2Desc,
+          COALESCE(rt2.relationshipDesc, 'Unknown') AS relationship2to1Desc,
+          r.dateStart,
+          r.dateEnd,
+          r.uncertain,
+          r.dateEndCause,
+          r.relationship1to2ID,
+          r.relationship2to1ID
+        FROM
+          relationship r
+        LEFT JOIN
+          relationshiptype rt1 ON r.relationship1to2ID = rt1.relationshiptypeID
+        LEFT JOIN
+          relationshiptype rt2 ON r.relationship2to1ID = rt2.relationshiptypeID
+        WHERE
+          r.person1ID IN (?) AND r.person2ID IN (?)
+        ORDER BY relationshipID;
+      `;
+      const [relationshipsResults] = await promisePool.query(
+        relationshipsQuery,
+        [personIDsArray, personIDsArray]
+      );
+
+      relationshipsResults.forEach((relationship) => {
+        const key = `person_${relationship.person1ID}-person_${relationship.person2ID}`;
+        edgesMap.set(key, {
+          from: `person_${relationship.person1ID}`,
+          to: `person_${relationship.person2ID}`,
+          type: 'relationship',
+          relationship1to2Desc: relationship.relationship1to2Desc || 'Unknown',
+          relationship2to1Desc: relationship.relationship2to1Desc || 'Unknown',
+          dateStart: relationship.dateStart || 'N/A',
+          dateEnd: relationship.dateEnd || 'N/A',
+          ...relationship,
+        });
+      });
+    }
+
+    // **Step 4: Return the Edges**
+    const edges = Array.from(edgesMap.values());
+
+    res.json(edges);
   } catch (error) {
-    console.error("Error running query:", error);
-    res.status(500).send("Internal Server Error");
+    console.error('Error running edges-query:', error);
+    res.status(500).send('Internal Server Error');
   }
 });
+
+
+
 module.exports = router;
