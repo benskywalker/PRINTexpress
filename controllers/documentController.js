@@ -1,4 +1,5 @@
 const dbPromise = require('../db');
+const documentQueries = require('../queries/documentQueries');
 
 exports.getDocumentById = async (req, res) => {
     const query = `SELECT * FROM document WHERE documentID = ${req.params.id}`;
@@ -19,7 +20,7 @@ exports.getGalleryDocs = async (req, res) => {
         const db = await dbPromise;
         const promisePool = db.promise();
         const [rows] = await promisePool.query(query);
-        const documents = rows.map(documentQueries.formatDocumentData);
+		const documents = rows.map(documentQueries.formatDocumentData);
         res.json(documents);
     } catch (error) {
         console.error('Failed to run query:', error);
