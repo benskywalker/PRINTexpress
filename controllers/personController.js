@@ -1,4 +1,6 @@
+const { query } = require('express');
 const dbPromise = require('../db');
+const personQueries = require('../queries/personQueries');
 const knex = require('knex')(require('../knexfile'));
 
 exports.getAllPersons = async (req, res) => {
@@ -50,11 +52,12 @@ exports.getPersonByName = async (req, res) => {
 };
 
 exports.getPersonById = async (req, res) => {
+    const query = personQueries.personQuery;
     try {
         const db = await dbPromise;
         const promisePool = db.promise();
-        const personData = await personQueries.getPersonData(promisePool, req.params.personID);
-        res.json(personData);
+        const [rows] = await promisePool.query(query, [req.params.personID]);
+        res.json(rows);
     } catch (error) {
         console.error('Error fetching data:', error);
         res.status(500).send('Internal Server Error');
