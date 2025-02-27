@@ -1,6 +1,6 @@
 # .gitignore
 node_modules/
-.env
+.env*
 
 # ingonore everything in public/pdf
 public/pdf/*

@@ -1,4 +1,4 @@
-exports.getQueryToolFields = async (promisePool) => {
+exports.getQueryToolFields = async (pool) => {
     const queries = {
         person: "DESCRIBE person",
         document: "DESCRIBE document",
@@ -9,7 +9,7 @@ exports.getQueryToolFields = async (promisePool) => {
 
     const results = await Promise.all(
         Object.entries(queries).map(async ([view, query]) => {
-            const [rows] = await promisePool.query(query);
+            const [rows] = await pool.query(query);
             return rows.map((row) => ({ field: row.Field, view }));
         })
     );

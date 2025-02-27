@@ -1,5 +1,5 @@
 
-const dbPromise = require('../db');
+const { getPool } = require('../db');
 const knex = require('knex')(require('../knexfile'));
 
 
@@ -13,12 +13,11 @@ exports.getQueryToolFields = async (req, res) => {
     };
 
     try {
-        const db = await dbPromise;
-        const promisePool = db.promise();
+        const pool = await getPool();
 
         const results = await Promise.all(
             Object.entries(queries).map(async ([view, query]) => {
-                const [rows] = await promisePool.query(query);
+                const [rows] = await pool.query(query);
                 return rows.map((row) => ({ field: row.Field, view }));
             })
         );
@@ -36,12 +35,11 @@ exports.executeKnexQuery = async (req, res) => {
     const { tables, fields, operators, values, dependentFields } = req.body;
 
     try {
-        const db = await dbPromise;
-        const promisePool = db.promise();
+        const pool = await getPool();
         let knexQuery = buildKnexQuery(tables, fields, operators, values, dependentFields);
 
         if (knexQuery) {
-            const [rows] = await promisePool.query(knexQuery.toString());
+            const [rows] = await pool.query(knexQuery.toString());
             res.json({ rows });
         } else {
             res.status(400).json({ error: 'Invalid query parameters' });

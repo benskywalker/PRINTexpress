@@ -5,7 +5,7 @@ const processEdges = require('./edgeProcessors');
 const fetchData = require('./dataFetcher');
 const { buildQueryFromParams } = require('./queryBuilder');
 
-exports.getAllNodes = async (promisePool) => {
+exports.getAllNodes = async (pool) => {
   try {
     const queries = getBasicQueries();
     
@@ -19,13 +19,13 @@ exports.getAllNodes = async (promisePool) => {
       [relationshipsResults],
       [keywordsResults],
     ] = await Promise.all([
-      promisePool.query(queries.peopleQuery),
-      promisePool.query(queries.documentsQuery),
-      promisePool.query(queries.religionsQuery),
-      promisePool.query(queries.organizationsQuery),
-      promisePool.query(queries.person2documentQuery),
-      promisePool.query(queries.relationshipsQuery),
-      promisePool.query(queries.keywordsQuery),
+      pool.query(queries.peopleQuery),
+      pool.query(queries.documentsQuery),
+      pool.query(queries.religionsQuery),
+      pool.query(queries.organizationsQuery),
+      pool.query(queries.person2documentQuery),
+      pool.query(queries.relationshipsQuery),
+      pool.query(queries.keywordsQuery),
     ]);
 
     const nodesMap = new Map([
@@ -46,7 +46,7 @@ exports.getAllNodes = async (promisePool) => {
   }
 };
 
-exports.getAllEdges = async (promisePool) => {
+exports.getAllEdges = async (pool) => {
   try {
     const queries = getBasicQueries();
     
@@ -56,10 +56,10 @@ exports.getAllEdges = async (promisePool) => {
       [person2organizationResults],
       [relationshipResults]
     ] = await Promise.all([
-      promisePool.query(queries.person2documentQuery),
-      promisePool.query('SELECT * FROM person2religion'),
-      promisePool.query('SELECT * FROM person2organization'),
-      promisePool.query(queries.relationshipsQuery)
+      pool.query(queries.person2documentQuery),
+      pool.query('SELECT * FROM person2religion'),
+      pool.query('SELECT * FROM person2organization'),
+      pool.query(queries.relationshipsQuery)
     ]);
 
     const edgesMap = new Map([
@@ -76,10 +76,10 @@ exports.getAllEdges = async (promisePool) => {
   }
 };
 
-exports.getNodesFromQuery = async (promisePool, queryParams) => {
+exports.getNodesFromQuery = async (pool, queryParams) => {
   try {
     const query = buildQueryFromParams(queryParams);
-    const [rows] = await promisePool.query(query.toString());
+    const [rows] = await pool.query(query.toString());
 
     const ids = {
       personIDs: new Set(),
@@ -97,17 +97,17 @@ exports.getNodesFromQuery = async (promisePool, queryParams) => {
     });
 
     if (ids.personIDs.size > 0) {
-      const personDocs = await fetchData.getPersonDocuments(promisePool, Array.from(ids.personIDs));
+      const personDocs = await fetchData.getPersonDocuments(pool, Array.from(ids.personIDs));
       personDocs.forEach(doc => ids.documentIDs.add(doc.documentID));
 
-      const relationships = await fetchData.getPersonRelationships(promisePool, Array.from(ids.personIDs));
+      const relationships = await fetchData.getPersonRelationships(pool, Array.from(ids.personIDs));
       relationships.forEach(rel => {
         ids.personIDs.add(rel.person1ID);
         ids.personIDs.add(rel.person2ID);
       });
     }
 
-    const nodesMap = await populateNodesMap(promisePool, ids);
+    const nodesMap = await populateNodesMap(pool, ids);
     return Array.from(nodesMap.values());
   } catch (error) {
     console.error('Error in getNodesFromQuery:', error);
@@ -115,9 +115,9 @@ exports.getNodesFromQuery = async (promisePool, queryParams) => {
   }
 };
 
-exports.getEdgesFromQuery = async (promisePool, queryParams) => {
+exports.getEdgesFromQuery = async (pool, queryParams) => {
   try {
-    const nodes = await this.getNodesFromQuery(promisePool, queryParams);
+    const nodes = await this.getNodesFromQuery(pool, queryParams);
     const ids = {
       personIDs: new Set(),
       documentIDs: new Set(),
@@ -135,10 +135,10 @@ exports.getEdgesFromQuery = async (promisePool, queryParams) => {
     const edgesMap = new Map();
 
     await Promise.all([
-      getPersonDocumentEdges(promisePool, ids, edgesMap),
-      getPersonReligionEdges(promisePool, ids, edgesMap),
-      getPersonOrganizationEdges(promisePool, ids, edgesMap),
-      getPersonRelationshipEdges(promisePool, ids, edgesMap)
+      getPersonDocumentEdges(pool, ids, edgesMap),
+      getPersonReligionEdges(pool, ids, edgesMap),
+      getPersonOrganizationEdges(pool, ids, edgesMap),
+      getPersonRelationshipEdges(pool, ids, edgesMap)
     ]);
 
     return Array.from(edgesMap.values());
@@ -148,10 +148,10 @@ exports.getEdgesFromQuery = async (promisePool, queryParams) => {
   }
 };
 
-async function getPersonDocumentEdges(promisePool, ids, edgesMap) {
+async function getPersonDocumentEdges(pool, ids, edgesMap) {
   if (ids.personIDs.size > 0 && ids.documentIDs.size > 0) {
     const edges = await fetchData.getPersonDocumentEdges(
-      promisePool,
+      pool,
       Array.from(ids.personIDs),
       Array.from(ids.documentIDs)
     );
@@ -159,10 +159,10 @@ async function getPersonDocumentEdges(promisePool, ids, edgesMap) {
   }
 }
 
-async function getPersonReligionEdges(promisePool, ids, edgesMap) {
+async function getPersonReligionEdges(pool, ids, edgesMap) {
   if (ids.personIDs.size > 0 && ids.religionIDs.size > 0) {
     const edges = await fetchData.getPersonReligionEdges(
-      promisePool,
+      pool,
       Array.from(ids.personIDs),
       Array.from(ids.religionIDs)
     );
@@ -170,10 +170,10 @@ async function getPersonReligionEdges(promisePool, ids, edgesMap) {
   }
 }
 
-async function getPersonOrganizationEdges(promisePool, ids, edgesMap) {
+async function getPersonOrganizationEdges(pool, ids, edgesMap) {
   if (ids.personIDs.size > 0 && ids.organizationIDs.size > 0) {
     const edges = await fetchData.getPersonOrganizationEdges(
-      promisePool,
+      pool,
       Array.from(ids.personIDs),
       Array.from(ids.organizationIDs)
     );
@@ -181,10 +181,10 @@ async function getPersonOrganizationEdges(promisePool, ids, edgesMap) {
   }
 }
 
-async function getPersonRelationshipEdges(promisePool, ids, edgesMap) {
+async function getPersonRelationshipEdges(pool, ids, edgesMap) {
   if (ids.personIDs.size > 0) {
     const relationships = await fetchData.getPersonRelationships(
-      promisePool,
+      pool,
       Array.from(ids.personIDs)
     );
     relationships.forEach(relationship => {
@@ -195,9 +195,9 @@ async function getPersonRelationshipEdges(promisePool, ids, edgesMap) {
   }
 }
 
-async function populateNodesMap(promisePool, ids) {
+async function populateNodesMap(pool, ids) {
   const nodesMap = new Map();
-  const data = await fetchData.getBasicData(promisePool, ids);
+  const data = await fetchData.getBasicData(pool, ids);
   
   if (data.persons.length) {
     processNodes.processPeople(data.persons).forEach((value, key) => nodesMap.set(key, value));

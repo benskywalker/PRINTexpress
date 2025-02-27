@@ -1,10 +1,8 @@
-const { query } = require('express');
-const dbPromise = require('../db');
+const { getPool } = require('../db');
 const personQueries = require('../queries/personQueries');
-const knex = require('knex')(require('../knexfile'));
 
 exports.getAllPersons = async (req, res) => {
-    const query = `SELECT
+  const query = `SELECT
     p.personID,
     CONCAT(p.firstName, " ", p.lastName) as fullName,
     p.firstName,
@@ -27,39 +25,36 @@ exports.getAllPersons = async (req, res) => {
   LEFT JOIN organization o ON o.organizationID = p2org.organizationID
   GROUP BY p.personID`;
 
-    try {
-        const db = await dbPromise;
-        const promisePool = db.promise();
-        const [rows] = await promisePool.query(query);
-        res.json(rows);
-    } catch (error) {
-        console.error('Failed to run query:', error);
-        res.status(500).json({ error: 'Failed to run query' });
-    }
+  try {
+    const pool = await getPool();
+    const [rows] = await pool.query(query);
+    res.json(rows);
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+  }
 };
 
 exports.getPersonByName = async (req, res) => {
-    const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`;
-    try {
-        const db = await dbPromise;
-        const promisePool = db.promise();
-        const [rows] = await promisePool.query(query);
-        res.json(rows);
-    } catch (error) {
-        console.error('Failed to run query:', error);
-        res.status(500).json({ error: 'Failed to run query' });
-    }
+  const query = `SELECT * FROM person WHERE firstName LIKE '${req.params.name}%' OR lastName LIKE '${req.params.name}%'`;
+  try {
+    const pool = await getPool();
+    const [rows] = await pool.query(query);
+    res.json(rows);
+  } catch (error) {
+    console.error('Failed to run query:', error);
+    res.status(500).json({ error: 'Failed to run query' });
+  }
 };
 
 exports.getPersonById = async (req, res) => {
-    const query = personQueries.personQuery;
-    try {
-        const db = await dbPromise;
-        const promisePool = db.promise();
-        const [rows] = await promisePool.query(query, [req.params.personID]);
-        res.json(rows);
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        res.status(500).send('Internal Server Error');
-    }
+  const query = personQueries.personQuery;
+  try {
+    const pool = await getPool();
+    const [rows] = await pool.query(query, [req.params.personID]);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    res.status(500).send('Internal Server Error');
+  }
 };
