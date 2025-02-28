@@ -1,5 +1,7 @@
+//// filepath: /C:/Users/benja/Documents/School/UCF/PRINTexpress/db.js
 const mysql = require('mysql2/promise');
 const { Client } = require('ssh2');
+const genericPool = require('generic-pool');
 require('dotenv').config();
 
 const dbServer = {
@@ -18,51 +20,63 @@ const tunnelConfig = {
 };
 
 const forwardConfig = {
-  srcHost: '127.0.0.1', // local side
-  srcPort: 3306,        // local port to forward from (can be any free port)
-  dstHost: dbServer.host, // where the DB is as seen from the SSH server
-  dstPort: dbServer.port, // DB port
+  srcHost: '127.0.0.1',          // local side
+  srcPort: 0,                    // use 0 so OS assigns an ephemeral port
+  dstHost: dbServer.host,        // DB server as seen from SSH
+  dstPort: dbServer.port,        // MySQL port
 };
 
-function createPoolThroughTunnel() {
-  return new Promise((resolve, reject) => {
-    const sshClient = new Client();
-    sshClient.on('ready', () => {
-      sshClient.forwardOut(
-        forwardConfig.srcHost,
-        forwardConfig.srcPort,
-        forwardConfig.dstHost,
-        forwardConfig.dstPort,
-        (err, stream) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          // Create a pool that uses the SSH forwarded stream.
-          const pool = mysql.createPool({
-            ...dbServer,
-            stream: stream,
-            waitForConnections: true,
-            connectionLimit: 1,
-            queueLimit: 0,
-            multipleStatements: true,
-          });
-          console.log('Connected to the database via SSH tunnel (pool)');
-          resolve(pool);
-        }
-      );
-    }).on('error', (err) => {
-   console.error('SSH connection error:', err);
-   reject(err);
-  }).connect(tunnelConfig);
-  });
-}
+const factory = {
+  create: () =>
+    new Promise((resolve, reject) => {
+      const sshClient = new Client();
+      sshClient
+        .on('ready', () => {
+          sshClient.forwardOut(
+            forwardConfig.srcHost,
+            forwardConfig.srcPort,
+            forwardConfig.dstHost,
+            forwardConfig.dstPort,
+            async (err, stream) => {
+              if (err) {
+                reject(err);
+                return;
+              }
+              try {
+                // Create a MySQL connection using the forwarded stream.
+                const connection = await mysql.createConnection({
+                  ...dbServer,
+                  stream: stream,
+                  multipleStatements: true,
+                });
+                // Save the SSH client reference to close the tunnel when destroying the connection.
+                connection._sshClient = sshClient;
+                console.log('Created a new MySQL connection via SSH tunnel');
+                resolve(connection);
+              } catch (connErr) {
+                sshClient.end();
+                reject(connErr);
+              }
+            }
+          );
+        })
+        .on('error', (err) => {
+          console.error('SSH connection error:', err);
+          reject(err);
+        })
+        .connect(tunnelConfig);
+    }),
+  destroy: async (connection) => {
+    // Ending the MySQL connection will also close the associated SSH tunnel.
+    await connection.end();
+  },
+};
 
-// Create the pool promise once.
-const poolPromise = createPoolThroughTunnel();
+const poolOpts = {
+  max: 10, // maximum concurrent connections
+  min: 1   // pool initializes with at least 1 connection
+};
 
-/**
- * Export a function that returns the pool. All caller files
- * will do: const pool = await getPool(); then pool.query(...);
- */
-module.exports.getPool = async () => poolPromise;
+const pool = genericPool.createPool(factory, poolOpts);
+
+module.exports.getPool = async () => pool;
