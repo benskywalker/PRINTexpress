@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const dbPromise = require('../db');
 const knex = require('knex')(require('../knexfile'));
 const fs = require('fs');
 const path = require('path');

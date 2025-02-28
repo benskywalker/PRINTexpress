@@ -1,44 +1,44 @@
 const fetchData = {
-    getPersonDocuments: async (promisePool, personIDs) => {
+    getPersonDocuments: async (pool, personIDs) => {
       const query = `
         SELECT * FROM person2document
         WHERE personID IN (?)
       `;
-      const [results] = await promisePool.query(query, [personIDs]);
+      const [results] = await pool.query(query, [personIDs]);
       return results;
     },
   
-    getPersonDocumentEdges: async (promisePool, personIDs, documentIDs) => {
+    getPersonDocumentEdges: async (pool, personIDs, documentIDs) => {
       const query = `
         SELECT * FROM person2document
         WHERE personID IN (?)
         AND docID IN (?)
       `;
-      const [results] = await promisePool.query(query, [personIDs, documentIDs]);
+      const [results] = await pool.query(query, [personIDs, documentIDs]);
       return results;
     },
   
-    getPersonReligionEdges: async (promisePool, personIDs, religionIDs) => {
+    getPersonReligionEdges: async (pool, personIDs, religionIDs) => {
       const query = `
         SELECT * FROM person2religion
         WHERE personID IN (?)
         AND religionID IN (?)
       `;
-      const [results] = await promisePool.query(query, [personIDs, religionIDs]);
+      const [results] = await pool.query(query, [personIDs, religionIDs]);
       return results;
     },
   
-    getPersonOrganizationEdges: async (promisePool, personIDs, organizationIDs) => {
+    getPersonOrganizationEdges: async (pool, personIDs, organizationIDs) => {
       const query = `
         SELECT * FROM person2organization
         WHERE personID IN (?)
         AND organizationID IN (?)
       `;
-      const [results] = await promisePool.query(query, [personIDs, organizationIDs]);
+      const [results] = await pool.query(query, [personIDs, organizationIDs]);
       return results;
     },
   
-    getPersonRelationships: async (promisePool, personIDs) => {
+    getPersonRelationships: async (pool, personIDs) => {
       const query = `
         SELECT
           r.relationshipID,
@@ -58,11 +58,11 @@ const fetchData = {
         WHERE r.person1ID IN (?) OR r.person2ID IN (?)
         ORDER BY relationshipID
       `;
-      const [results] = await promisePool.query(query, [personIDs, personIDs]);
+      const [results] = await pool.query(query, [personIDs, personIDs]);
       return results;
     },
   
-    getBasicData: async (promisePool, ids) => {
+    getBasicData: async (pool, ids) => {
       const queries = {
         persons: 'SELECT * FROM person WHERE personID IN (?)',
         documents: `
@@ -76,10 +76,10 @@ const fetchData = {
       };
   
       const results = await Promise.all([
-        ids.personIDs.size > 0 ? promisePool.query(queries.persons, [Array.from(ids.personIDs)]) : [[]], 
-        ids.documentIDs.size > 0 ? promisePool.query(queries.documents, [Array.from(ids.documentIDs)]) : [[]],
-        ids.organizationIDs.size > 0 ? promisePool.query(queries.organizations, [Array.from(ids.organizationIDs)]) : [[]],
-        ids.religionIDs.size > 0 ? promisePool.query(queries.religions, [Array.from(ids.religionIDs)]) : [[]]
+        ids.personIDs.size > 0 ? pool.query(queries.persons, [Array.from(ids.personIDs)]) : [[]], 
+        ids.documentIDs.size > 0 ? pool.query(queries.documents, [Array.from(ids.documentIDs)]) : [[]],
+        ids.organizationIDs.size > 0 ? pool.query(queries.organizations, [Array.from(ids.organizationIDs)]) : [[]],
+        ids.religionIDs.size > 0 ? pool.query(queries.religions, [Array.from(ids.religionIDs)]) : [[]]
       ]);
   
       return {
