@@ -1,4 +1,3 @@
-//// filepath: /C:/Users/benja/Documents/School/UCF/PRINTexpress/db.js
 const mysql = require('mysql2/promise');
 const { Client } = require('ssh2');
 const genericPool = require('generic-pool');
@@ -43,7 +42,7 @@ const factory = {
                 return;
               }
               try {
-                // Create a MySQL connection using the forwarded stream.
+                // For testing, you can set a short connectTimeout (e.g., 1000 ms).
                 const connection = await mysql.createConnection({
                   ...dbServer,
                   stream: stream,
@@ -66,6 +65,18 @@ const factory = {
         })
         .connect(tunnelConfig);
     }),
+  // Add validate so that before a connection is handed out, it is tested.
+  validate: async (connection) => {
+    try {
+      // Run a trivial query to ensure the connection is still open.
+      await connection.query('SELECT 1');
+	  //console.log("Validated connection");
+      return true;
+    } catch (err) {
+		console.log("Removing invalid connection. This should prevent a crash.");
+      return false;
+    }
+  },
   destroy: async (connection) => {
     // Ending the MySQL connection will also close the associated SSH tunnel.
     await connection.end();
@@ -74,7 +85,9 @@ const factory = {
 
 const poolOpts = {
   max: 10, // maximum concurrent connections
-  min: 1   // pool initializes with at least 1 connection
+  min: 2,
+
+  testOnBorrow: true,      // validate a connection before giving it out
 };
 
 const pool = genericPool.createPool(factory, poolOpts);
