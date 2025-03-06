@@ -78,8 +78,22 @@ const factory = {
     }
   },
   destroy: async (connection) => {
-    // Ending the MySQL connection will also close the associated SSH tunnel.
-    await connection.end();
+    try {
+		// Close the MySQL connection.
+		await connection.end();
+	}
+	catch (err) {
+		console.error("Error ending MySQL connection:", err);
+	}
+	try {
+		// Also close the underlying SSH tunnel if still open.
+		if (connection._sshClient) {
+		connection._sshClient.end();
+		}
+	}
+	catch (err) {
+		console.error("Error ending SSH tunnel:", err);
+	}
   },
 };
 
