@@ -211,6 +211,13 @@ async function populateNodesMap(pool, ids) {
   if (data.religions.length) {
     processNodes.processReligions(data.religions).forEach((value, key) => nodesMap.set(key, value));
   }
+
+  if (ids.personIDs.size > 0) {
+    const relationships = await fetchData.getPersonRelationships(pool, Array.from(ids.personIDs));
+    processRelationships.processRelationships(relationships, nodesMap);
+  }
+  
+  
   
   return nodesMap;
 }
