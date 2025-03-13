@@ -4,7 +4,7 @@ const getBasicQueries = () => ({
   peopleQuery: `SELECT * FROM person;`,
   
   documentsQuery: `
-    SELECT a.*, b.internalPDFname, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
+    SELECT a.*, b.internalPDFname, b.hidden, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
     FROM document a
     JOIN pdf_documents b ON a.documentID = b.documentID
     AND b.fileTypeID = 2;
