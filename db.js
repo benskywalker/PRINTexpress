@@ -5,7 +5,7 @@ require('dotenv').config();
 const useSsh = process.env.USE_SSH === "true";
 
 if (useSsh) {
-  // SSH tunnel mode with generic‑pool
+  // SSH tunnel mode with generic-pool
   const { Client } = require('ssh2');
   const genericPool = require('generic-pool');
 
@@ -106,21 +106,52 @@ if (useSsh) {
   const pool = genericPool.createPool(factory, poolOpts);
   module.exports.getPool = async () => pool;
 } else {
-	console.log("Direct connection attempted");
-  // Direct MySQL connection using mysql2's createPool
-  const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT, 10),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    multipleStatements: true,
-  });
-  console.log("Created direct connection!");
+  console.log("Direct connection attempted");
+  // Direct MySQL connection wrapped with generic-pool for error checking.
+  const genericPool = require('generic-pool');
+  const directFactory = {
+    create: () =>
+      new Promise(async (resolve, reject) => {
+        try {
+          const connection = await mysql.createConnection({
+            host: process.env.DB_HOST,
+            port: parseInt(process.env.DB_PORT, 10),
+            user: process.env.DB_USER,
+            password: process.env.DB_PASS,
+            database: process.env.DB_NAME,
+            multipleStatements: true,
+          });
+          console.log('Created a new direct MySQL connection');
+          resolve(connection);
+        } catch (err) {
+          reject(err);
+        }
+      }),
+    validate: async (connection) => {
+      try {
+        await connection.query('SELECT 1');
+        return true;
+      } catch (err) {
+        console.log("Direct: Removing invalid direct connection. This is probably a fix for the 500 errors.");
+        return false;
+      }
+    },
+    destroy: async (connection) => {
+      try {
+        await connection.end();
+      } catch (err) {
+        console.error("Error ending direct MySQL connection:", err);
+      }
+    },
+  };
 
-  // Optional: you might add your own connection-checking logic in your controllers.
+  const poolOpts = {
+    max: 10,
+    min: 2,
+    testOnBorrow: true,
+  };
+
+  const pool = genericPool.createPool(directFactory, poolOpts);
+  console.log("Created direct connection pool!");
   module.exports.getPool = async () => pool;
 }
