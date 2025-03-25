@@ -96,9 +96,14 @@ exports.getNodesFromQuery = async (pool, queryParams) => {
       else if (tables[0] === 'religion') ids.religionIDs.add(row.religionID);
     });
 
+    const person2documentResults = [];
+    
     if (ids.personIDs.size > 0) {
       const personDocs = await fetchData.getPersonDocuments(pool, Array.from(ids.personIDs));
-      personDocs.forEach(doc => ids.documentIDs.add(doc.documentID));
+      
+      person2documentResults.push(...personDocs);
+      
+      personDocs.forEach(doc => ids.documentIDs.add(doc.docID));
 
       const relationships = await fetchData.getPersonRelationships(pool, Array.from(ids.personIDs));
       relationships.forEach(rel => {
@@ -107,7 +112,61 @@ exports.getNodesFromQuery = async (pool, queryParams) => {
       });
     }
 
-    const nodesMap = await populateNodesMap(pool, ids);
+    const data = await fetchData.getBasicData(pool, ids);
+    const nodesMap = new Map();
+    
+    if (data.persons.length) {
+      processNodes.processPeople(data.persons).forEach((value, key) => nodesMap.set(key, value));
+    }
+    if (data.documents.length) {
+      processNodes.processDocuments(data.documents).forEach((value, key) => nodesMap.set(key, value));
+    }
+    if (data.organizations.length) {
+      processNodes.processOrganizations(data.organizations).forEach((value, key) => nodesMap.set(key, value));
+    }
+    if (data.religions.length) {
+      processNodes.processReligions(data.religions).forEach((value, key) => nodesMap.set(key, value));
+    }
+
+    if (person2documentResults.length > 0) {
+      let documentsQuery = 'SELECT * FROM document WHERE documentID IN (?)';
+      const [fullDocResults] = await pool.query(documentsQuery, [Array.from(ids.documentIDs)]);
+      
+      const docIdsArray = Array.from(ids.documentIDs);
+      let p2dQuery = 'SELECT * FROM person2document WHERE docID IN (?)';
+      const [allP2DResults] = await pool.query(p2dQuery, [docIdsArray]);
+      
+      const allDocPersonIds = new Set(allP2DResults.map(p2d => p2d.personID));
+      
+      const [allPeopleResults] = await pool.query(
+        'SELECT * FROM person WHERE personID IN (?)', 
+        [Array.from(allDocPersonIds)]
+      );
+      
+      allPeopleResults.forEach(person => {
+        const personKey = `person_${person.personID}`;
+        if (!nodesMap.has(personKey)) {
+          const processedPerson = processNodes.processPeople([person]).get(personKey);
+          nodesMap.set(personKey, processedPerson);
+        }
+      });
+      
+      fullDocResults.forEach(doc => {
+        const docKey = `document_${doc.documentID}`;
+        if (!nodesMap.has(docKey)) {
+          const processedDoc = processNodes.processDocuments([doc]).get(docKey);
+          nodesMap.set(docKey, processedDoc);
+        }
+      });
+      
+      processRelationships.processPerson2Document(allP2DResults, nodesMap, allPeopleResults);
+    }
+
+    if (ids.personIDs.size > 0) {
+      const relationships = await fetchData.getPersonRelationships(pool, Array.from(ids.personIDs));
+      processRelationships.processRelationships(relationships, nodesMap);
+    }
+    
     return Array.from(nodesMap.values());
   } catch (error) {
     console.error('Error in getNodesFromQuery:', error);
@@ -134,90 +193,58 @@ exports.getEdgesFromQuery = async (pool, queryParams) => {
 
     const edgesMap = new Map();
 
-    await Promise.all([
-      getPersonDocumentEdges(pool, ids, edgesMap),
-      getPersonReligionEdges(pool, ids, edgesMap),
-      getPersonOrganizationEdges(pool, ids, edgesMap),
-      getPersonRelationshipEdges(pool, ids, edgesMap)
-    ]);
+    if (ids.personIDs.size > 0 && ids.documentIDs.size > 0) {
+      const docIdsArray = Array.from(ids.documentIDs);
+      let p2dQuery = 'SELECT * FROM person2document WHERE docID IN (?)';
+      const [allDocEdges] = await pool.query(p2dQuery, [docIdsArray]);
+      
+      const processedEdges = processEdges.processPersonDocumentEdges(allDocEdges);
+      processedEdges.forEach((value, key) => {
+        edgesMap.set(key, value);
+      });
+    }
+
+    if (ids.personIDs.size > 0 && ids.religionIDs.size > 0) {
+      const personReligionEdges = await fetchData.getPersonReligionEdges(
+        pool,
+        Array.from(ids.personIDs),
+        Array.from(ids.religionIDs)
+      );
+      
+      const processedEdges = processEdges.processReligionEdges(personReligionEdges);
+      processedEdges.forEach((value, key) => {
+        edgesMap.set(key, value);
+      });
+    }
+
+    if (ids.personIDs.size > 0 && ids.organizationIDs.size > 0) {
+      const personOrgEdges = await fetchData.getPersonOrganizationEdges(
+        pool,
+        Array.from(ids.personIDs),
+        Array.from(ids.organizationIDs)
+      );
+      
+      const processedEdges = processEdges.processOrganizationEdges(personOrgEdges);
+      processedEdges.forEach((value, key) => {
+        edgesMap.set(key, value);
+      });
+    }
+
+    if (ids.personIDs.size > 0) {
+      const relationships = await fetchData.getPersonRelationships(
+        pool,
+        Array.from(ids.personIDs)
+      );
+      
+      const processedEdges = processEdges.processRelationshipEdges(relationships);
+      processedEdges.forEach((value, key) => {
+        edgesMap.set(key, value);
+      });
+    }
 
     return Array.from(edgesMap.values());
   } catch (error) {
-    console.error('Error in getEdgesFromQuery:', error);
+    console.error('Error: ', error);
     throw error;
   }
 };
-
-async function getPersonDocumentEdges(pool, ids, edgesMap) {
-  if (ids.personIDs.size > 0 && ids.documentIDs.size > 0) {
-    const edges = await fetchData.getPersonDocumentEdges(
-      pool,
-      Array.from(ids.personIDs),
-      Array.from(ids.documentIDs)
-    );
-    edges.forEach(edge => edgesMap.set(edge.key, edge.value));
-  }
-}
-
-async function getPersonReligionEdges(pool, ids, edgesMap) {
-  if (ids.personIDs.size > 0 && ids.religionIDs.size > 0) {
-    const edges = await fetchData.getPersonReligionEdges(
-      pool,
-      Array.from(ids.personIDs),
-      Array.from(ids.religionIDs)
-    );
-    edges.forEach(edge => edgesMap.set(edge.key, edge.value));
-  }
-}
-
-async function getPersonOrganizationEdges(pool, ids, edgesMap) {
-  if (ids.personIDs.size > 0 && ids.organizationIDs.size > 0) {
-    const edges = await fetchData.getPersonOrganizationEdges(
-      pool,
-      Array.from(ids.personIDs),
-      Array.from(ids.organizationIDs)
-    );
-    edges.forEach(edge => edgesMap.set(edge.key, edge.value));
-  }
-}
-
-async function getPersonRelationshipEdges(pool, ids, edgesMap) {
-  if (ids.personIDs.size > 0) {
-    const relationships = await fetchData.getPersonRelationships(
-      pool,
-      Array.from(ids.personIDs)
-    );
-    relationships.forEach(relationship => {
-      processEdges.processRelationshipEdges([relationship]).forEach((value, key) => {
-        edgesMap.set(key, value);
-      });
-    });
-  }
-}
-
-async function populateNodesMap(pool, ids) {
-  const nodesMap = new Map();
-  const data = await fetchData.getBasicData(pool, ids);
-  
-  if (data.persons.length) {
-    processNodes.processPeople(data.persons).forEach((value, key) => nodesMap.set(key, value));
-  }
-  if (data.documents.length) {
-    processNodes.processDocuments(data.documents).forEach((value, key) => nodesMap.set(key, value));
-  }
-  if (data.organizations.length) {
-    processNodes.processOrganizations(data.organizations).forEach((value, key) => nodesMap.set(key, value));
-  }
-  if (data.religions.length) {
-    processNodes.processReligions(data.religions).forEach((value, key) => nodesMap.set(key, value));
-  }
-
-  if (ids.personIDs.size > 0) {
-    const relationships = await fetchData.getPersonRelationships(pool, Array.from(ids.personIDs));
-    processRelationships.processRelationships(relationships, nodesMap);
-  }
-  
-  
-  
-  return nodesMap;
-}
