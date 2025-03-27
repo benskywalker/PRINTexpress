@@ -1,45 +1,45 @@
 const fetchData = {
-    getPersonDocuments: async (pool, personIDs) => {
-      const query = `
+  getPersonDocuments: async (pool, personIDs) => {
+    const query = `
         SELECT * FROM person2document
         WHERE personID IN (?)
       `;
-      const [results] = await pool.query(query, [personIDs]);
-      return results;
-    },
-  
-    getPersonDocumentEdges: async (pool, personIDs, documentIDs) => {
-      const query = `
+    const [results] = await pool.query(query, [personIDs]);
+    return results;
+  },
+
+  getPersonDocumentEdges: async (pool, personIDs, documentIDs) => {
+    const query = `
         SELECT * FROM person2document
         WHERE personID IN (?)
         AND docID IN (?)
       `;
-      const [results] = await pool.query(query, [personIDs, documentIDs]);
-      return results;
-    },
-  
-    getPersonReligionEdges: async (pool, personIDs, religionIDs) => {
-      const query = `
+    const [results] = await pool.query(query, [personIDs, documentIDs]);
+    return results;
+  },
+
+  getPersonReligionEdges: async (pool, personIDs, religionIDs) => {
+    const query = `
         SELECT * FROM person2religion
         WHERE personID IN (?)
         AND religionID IN (?)
       `;
-      const [results] = await pool.query(query, [personIDs, religionIDs]);
-      return results;
-    },
-  
-    getPersonOrganizationEdges: async (pool, personIDs, organizationIDs) => {
-      const query = `
+    const [results] = await pool.query(query, [personIDs, religionIDs]);
+    return results;
+  },
+
+  getPersonOrganizationEdges: async (pool, personIDs, organizationIDs) => {
+    const query = `
         SELECT * FROM person2organization
         WHERE personID IN (?)
         AND organizationID IN (?)
       `;
-      const [results] = await pool.query(query, [personIDs, organizationIDs]);
-      return results;
-    },
-  
-    getPersonRelationships: async (pool, personIDs) => {
-      const query = `
+    const [results] = await pool.query(query, [personIDs, organizationIDs]);
+    return results;
+  },
+
+  getPersonRelationships: async (pool, personIDs) => {
+    const query = `
         SELECT
           r.relationshipID,
           r.person1ID,
@@ -58,37 +58,37 @@ const fetchData = {
         WHERE r.person1ID IN (?) OR r.person2ID IN (?)
         ORDER BY relationshipID
       `;
-      const [results] = await pool.query(query, [personIDs, personIDs]);
-      return results;
-    },
-  
-    getBasicData: async (pool, ids) => {
-      const queries = {
-        persons: 'SELECT * FROM person WHERE personID IN (?)',
-        documents: `
+    const [results] = await pool.query(query, [personIDs, personIDs]);
+    return results;
+  },
+
+  getBasicData: async (pool, ids) => {
+    const queries = {
+      persons: 'SELECT * FROM person WHERE personID IN (?)',
+      documents: `
           SELECT a.*, b.internalPDFname, DATE_FORMAT(a.sortingDate, '%Y-%m-%d') AS date 
           FROM document a
           LEFT JOIN pdf_documents b ON a.documentID = b.documentID AND b.fileTypeID = 2
           WHERE a.documentID IN (?)
         `,
-        organizations: 'SELECT * FROM organization WHERE organizationID IN (?)',
-        religions: 'SELECT * FROM religion WHERE religionID IN (?)'
-      };
-  
-      const results = await Promise.all([
-        ids.personIDs.size > 0 ? pool.query(queries.persons, [Array.from(ids.personIDs)]) : [[]], 
-        ids.documentIDs.size > 0 ? pool.query(queries.documents, [Array.from(ids.documentIDs)]) : [[]],
-        ids.organizationIDs.size > 0 ? pool.query(queries.organizations, [Array.from(ids.organizationIDs)]) : [[]],
-        ids.religionIDs.size > 0 ? pool.query(queries.religions, [Array.from(ids.religionIDs)]) : [[]]
-      ]);
-  
-      return {
-        persons: results[0][0],
-        documents: results[1][0],
-        organizations: results[2][0],
-        religions: results[3][0]
-      };
-    }
-  };
-  
-  module.exports = fetchData;
+      organizations: 'SELECT * FROM organization WHERE organizationID IN (?)',
+      religions: 'SELECT * FROM religion WHERE religionID IN (?)'
+    };
+
+    const results = await Promise.all([
+      ids.personIDs.size > 0 ? pool.query(queries.persons, [Array.from(ids.personIDs)]) : [[]],
+      ids.documentIDs.size > 0 ? pool.query(queries.documents, [Array.from(ids.documentIDs)]) : [[]],
+      ids.organizationIDs.size > 0 ? pool.query(queries.organizations, [Array.from(ids.organizationIDs)]) : [[]],
+      ids.religionIDs.size > 0 ? pool.query(queries.religions, [Array.from(ids.religionIDs)]) : [[]]
+    ]);
+
+    return {
+      persons: results[0][0],
+      documents: results[1][0],
+      organizations: results[2][0],
+      religions: results[3][0]
+    };
+  }
+};
+
+module.exports = fetchData;
